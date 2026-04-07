@@ -28,7 +28,7 @@ The environment is represented by 10×10 grids where different cell values repre
 | File Name | Description |
 |---|---|
 | `main.py` | The core script for the Gridworld project. It handles data preprocessing, initializes multiple DRL agents (DQN, Double DQN, and Expected SARSA), runs the training loops, and evaluates performance via accuracy and expected cumulative return. |
-| `Comparison of 3 DRLs.png` | A visualization comparing the performance metrics (likely training loss or reward over time) for the three implemented Reinforcement Learning algorithms. |
+| `Comparison_of_3_DRLs.png` | A visualization comparing the performance metrics (likely training loss or reward over time) for the three implemented Reinforcement Learning algorithms. |
 | `train.csv` | The primary training dataset containing state-action transitions: state, action, reward, next_state, and done flags for the Gridworld agent. |
 | `eval_challenge.csv` | A testing dataset where the action and reward columns are placeholders (-1 or -999), used to challenge the trained models to predict the correct behavior. |
 | `eval_solution.csv` | The ground-truth "answer key" for the challenge set, containing the optimal actions and actual rewards used to calculate model accuracy.|
