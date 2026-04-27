@@ -84,15 +84,6 @@ An on-policy approach that calculates the expected value across all possible nex
     * All three architectures achieved an identical accuracy of **42%** in the Evaluation Challenge. This indicates that while the learning trajectories differ, the resulting policies converge to the same level of decision-making proficiency relative to the optimal solution.
 
 
-## Technical Stack
-
-| Area | Technologies |
-|---|---|
-| **Programming Language** | Python 3 |
-| **Libraries** | pandas, numpy, matplotlib, scikit-learn, pytorch |
-| **Models** | Deep Q-Learning Network, Deep Double-Q-Learning Network, Deep Expected-SARSA Network |
-| **Techniques** | HuberLoss, Adam Optimizer, Neural Network |
-
 ## How to Run
 
 1.  **Clone the Repository**:
@@ -101,21 +92,14 @@ An on-policy approach that calculates the expected value across all possible nex
     git clone https://github.com/Dochikhoa2006/GridWorld-DRL.git
     ```
 
-2.  **Install Dependencies**:
-    Make sure you have Python and the necessary libraries installed:
-    ```bash
-    pip install pandas matplotlib scikit-learn torch torchvision torchaudio
-    ```
-
-3.  **Data Preparation**:
-    Ensure all related csv file are in the same directory as the scripts.
-
-4.  **Training and Evaluation**:
-    ```bash
-    python main.py
-    ```
-
-> **Note:** Accessing to directory of scripts before running
+2.  **Docker**:
+    * To build docker image:
+        ```bash
+        docker build -t gridworld-navigation .
+    * To run docker container:
+        ```bash
+        docker run -it gridworld-navigation
+        ```
 
 ## License
 
