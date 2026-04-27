@@ -379,13 +379,3 @@ if __name__ == '__main__':
     accuracy = experiment (Deep_Q_Learning, Deep_Double_Q_Learning_1, Deep_Double_Q_Learning_2, Deep_Expected_SARSA, state_test, action_result)
     expected_return = expected_cumulative_return (Deep_Q_Learning, Deep_Double_Q_Learning_1, Deep_Double_Q_Learning_2, Deep_Expected_SARSA)
     plotting (expected_return, accuracy)
-
-
-
-
-
-# cd "/Users/chikhoado/Desktop/PROJECTS/Gridworld-10"
-# /opt/homebrew/bin/python3.12 -m venv .venv
-# source .venv/bin/activate
-# pip install pandas matplotlib scikit-learn torch torchvision torchaudio
-# python "/Users/chikhoado/Desktop/PROJECTS/Gridworld-10/main.py"
