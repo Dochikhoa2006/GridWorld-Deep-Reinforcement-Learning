@@ -6,13 +6,13 @@ import torch.optim as optim
 import matplotlib.pyplot as plt 
 import copy
 
-sample_gridworld_map_0 = pd.read_csv ("/Users/chikhoado/Desktop/PROJECTS/Gridworld-10/Gridworld-10_Dataset/sample_gridworld_map_0.csv")
-sample_gridworld_map_1 = pd.read_csv ("/Users/chikhoado/Desktop/PROJECTS/Gridworld-10/Gridworld-10_Dataset/sample_gridworld_map_1.csv")
-sample_gridworld_map_2 = pd.read_csv ("/Users/chikhoado/Desktop/PROJECTS/Gridworld-10/Gridworld-10_Dataset/sample_gridworld_map_2.csv")
+sample_gridworld_map_0 = pd.read_csv ("Gridworld-10_Dataset/sample_gridworld_map_0.csv")
+sample_gridworld_map_1 = pd.read_csv ("Gridworld-10_Dataset/sample_gridworld_map_1.csv")
+sample_gridworld_map_2 = pd.read_csv ("Gridworld-10_Dataset/sample_gridworld_map_2.csv")
 
-eval_challenge = pd.read_csv ("/Users/chikhoado/Desktop/PROJECTS/Gridworld-10/Gridworld-10_Dataset/eval_challenge.csv")
-eval_solution = pd.read_csv ("/Users/chikhoado/Desktop/PROJECTS/Gridworld-10/Gridworld-10_Dataset/eval_solution.csv")
-train_dataset = pd.read_csv ("/Users/chikhoado/Desktop/PROJECTS/Gridworld-10/Gridworld-10_Dataset/train.csv")
+eval_challenge = pd.read_csv ("Gridworld-10_Dataset/eval_challenge.csv")
+eval_solution = pd.read_csv ("Gridworld-10_Dataset/eval_solution.csv")
+train_dataset = pd.read_csv ("Gridworld-10_Dataset/train.csv")
 
 def check_and_clean_dataset ():
 
