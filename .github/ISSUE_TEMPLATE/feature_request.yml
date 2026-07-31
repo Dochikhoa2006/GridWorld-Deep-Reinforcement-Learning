@@ -1,0 +1,96 @@
+name: Feature request
+description: Propose a focused improvement with a clear use case and validation plan
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for proposing an improvement. Strong proposals explain the user problem, the intended scope, and how the result can be verified.
+
+        For suspected vulnerabilities, do not open a feature request. Follow the private instructions in [`SECURITY.md`](https://github.com/Dochikhoa2006/GridWorld-Deep-Reinforcement-Learning/security/policy).
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checks
+      options:
+        - label: I searched the existing issues and pull requests for a similar proposal.
+          required: true
+        - label: This request is not a security report.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Select the primary area affected by this proposal.
+      options:
+        - Algorithms and losses
+        - Data loading and validation
+        - Training configuration
+        - Evaluation and reporting
+        - Command-line interface
+        - Testing and continuous integration
+        - Documentation and contributor experience
+        - Packaging or containers
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: Describe the concrete user or research workflow that is currently difficult, missing, or error-prone.
+      placeholder: When ..., users cannot ... because ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Explain the desired behavior, public interface, and boundaries of the change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation plan
+      description: Explain how the change should be tested or measured without using evaluation answers as training data.
+      placeholder: Unit tests, hand-checkable tensor example, smoke command, or reproducible benchmark protocol
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe workarounds or alternative designs and why they are insufficient.
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Reproducibility and compatibility impact
+      description: Note any effects on seeds, defaults, artifact schemas, checkpoints, CLI arguments, or prior results.
+      placeholder: No compatibility impact, or describe the expected migration.
+
+  - type: textarea
+    id: references
+    attributes:
+      label: Supporting references
+      description: Link primary papers, specifications, or minimal examples when they materially support the proposal.
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to help implement or test this change.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add mock output, diagrams, or other concise context if useful.

@@ -1,0 +1,110 @@
+name: Bug report
+description: Report a reproducible defect in the code, CLI, data validation, or artifacts
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a problem. A small, reproducible example is the fastest way to help us investigate.
+
+        **Security:** Do not disclose suspected vulnerabilities in a public issue. Follow the private reporting instructions in the [security policy](https://github.com/Dochikhoa2006/GridWorld-Deep-Reinforcement-Learning/security/policy) or email **dochikhoa2006@gmail.com** with the subject `[Gridworld-10 security]`.
+
+        Do not attach private datasets, credentials, model files from untrusted sources, or logs containing sensitive local paths.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checks
+      options:
+        - label: I searched the existing issues and did not find an equivalent report.
+          required: true
+        - label: This report does not disclose a security vulnerability.
+          required: true
+        - label: I can reproduce the problem from the information provided below.
+          required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem summary
+      description: Clearly describe the defect and its impact.
+      placeholder: The training command fails when ... This prevents ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: List the smallest sequence of commands or code needed to reproduce the problem.
+      placeholder: |
+        1. Create a clean Python 3.11 environment.
+        2. Install with `python -m pip install -r requirements.txt`.
+        3. Run `python -m gridworld_rl ...`.
+        4. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Explain what you expected to happen and why.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Explain what happened, including the complete error message when relevant.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Provide the package version, release tag, or full Git commit SHA.
+      placeholder: 2.0.0 or 0123456789abcdef...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the operating system, Python and PyTorch versions, install method, and compute device.
+      placeholder: |
+        - OS: Ubuntu 24.04
+        - Python: 3.11.x
+        - PyTorch: 2.x
+        - Install: virtual environment from requirements.txt
+        - Device: CPU
+    validations:
+      required: true
+
+  - type: textarea
+    id: experiment
+    attributes:
+      label: Experiment configuration
+      description: Include the command, algorithm, seed, relevant configuration values, and dataset scope. Do not upload a dataset you cannot redistribute.
+      placeholder: |
+        Command:
+        Algorithm:
+        Seed:
+        Configuration overrides:
+        Dataset: synthetic fixture / authorized Gridworld-10 copy / not applicable
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or traceback
+      description: Paste only the relevant text. Redact credentials, private paths, and personal information.
+      render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add any other details that could help isolate the problem, such as whether it is a regression.
