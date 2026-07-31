@@ -46,6 +46,8 @@ tagged releases.
 
 ### Changed
 
+- Canonicalized repository links and generated package metadata around the official
+  `Dochikhoa2006/GridWorld-Deep-Reinforcement-Learning` GitHub repository.
 - Replaced the legacy one-command `main.py` workflow with
   `python -m gridworld_rl train --config configs/default.json`.
 - Adopted the standard `src/` package layout and split tests into `unit/` and

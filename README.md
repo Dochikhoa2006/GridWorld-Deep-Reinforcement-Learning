@@ -13,6 +13,9 @@ inspect.
 
 **DQN · Double DQN · Expected SARSA · discrete Conservative Q-Learning**
 
+**Official repository:**
+[Dochikhoa2006/GridWorld-Deep-Reinforcement-Learning](https://github.com/Dochikhoa2006/GridWorld-Deep-Reinforcement-Learning)
+
 [Quick start](#quick-start) ·
 [Diagnostic result](docs/results/BENCHMARK.md) ·
 [Architecture](docs/ARCHITECTURE.md) ·
@@ -22,13 +25,13 @@ inspect.
 
 ## Project at a glance
 
-|                               |                                                                                                                                 |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| **Research question**   | How do standard value-learning targets compare with a conservative offline baseline when learning only from logged transitions? |
+|                               |                                                                                                                                         |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **Research question**   | How do standard value-learning targets compare with a conservative offline baseline when learning only from logged transitions?         |
 | **Evaluation**          | Greedy action agreement on the provided evaluation split, with overlap, ambiguity, trivial-reference, confusion, and recall diagnostics |
-| **Experiment contract** | Validated CSV input → seeded training → checkpoints and JSON metrics → deterministic report generation                       |
-| **Engineering stack**   | Python 3.11+, PyTorch, NumPy, pandas, Matplotlib, pytest, GitHub Actions, Docker                                                |
-| **Quality gates**       | Dataset-free unit/integration tests with ≥85% coverage, Ruff, package build, installed-wheel, and CLI smoke checks             |
+| **Experiment contract** | Validated CSV input → seeded training → checkpoints and JSON metrics → deterministic report generation                               |
+| **Engineering stack**   | Python 3.11+, PyTorch, NumPy, pandas, Matplotlib, pytest, GitHub Actions, Docker                                                        |
+| **Quality gates**       | Dataset-free unit/integration tests with ≥85% coverage, Ruff, package build, installed-wheel, and CLI smoke checks                     |
 
 This is intentionally an inspectable baseline suite, not a claim of
 state-of-the-art performance. It makes a narrow experiment easy to audit: target
@@ -203,15 +206,15 @@ dataset and runtime provenance, and pass the generated integrity manifest. The t
 reports provided evaluation-split action agreement as mean ± sample standard
 deviation—not out-of-sample generalization or environment return.
 
-| Algorithm                                   | Action agreement |
-| ------------------------------------------- | ---------------: |
-| CQL                                         |  41.38% ± 0.01% |
-| Expected SARSA                              |  33.79% ± 5.02% |
-| Double DQN                                  |  32.97% ± 5.29% |
-| DQN                                         |  31.37% ± 2.34% |
-| Training-majority reference (always action 1) |        39.23% |
-| Training per-state-mode reference             |        41.63% |
-| Evaluation-fitted state-mode ceiling          |        44.66% |
+| Algorithm                                     | Action agreement |
+| --------------------------------------------- | ---------------: |
+| CQL                                           |  41.38% ± 0.01% |
+| Expected SARSA                                |  33.79% ± 5.02% |
+| Double DQN                                    |  32.97% ± 5.29% |
+| DQN                                           |  31.37% ± 2.34% |
+| Training-majority reference (always action 1) |           39.23% |
+| Training per-state-mode reference             |           41.63% |
+| Evaluation-fitted state-mode ceiling          |           44.66% |
 
 The first two references are selected from training data and scored on the
 evaluation split. The ceiling is an explicitly label-fitted diagnostic: it is not a
