@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it using the metadata below and cite
+  the Gridworld-10 dataset separately according to its owner's instructions.
+title: Gridworld-10 Offline Reinforcement Learning
+type: software
+authors:
+  - family-names: Do
+    given-names: Chi Khoa
+repository-code: "https://github.com/Dochikhoa2006/GridWorld-Deep-Reinforcement-Learning"
+url: "https://github.com/Dochikhoa2006/GridWorld-Deep-Reinforcement-Learning"
+license: MIT
+abstract: >-
+  A reproducible PyTorch pipeline for comparing DQN, Double DQN, Expected
+  SARSA, and discrete Conservative Q-Learning on a fixed 10 by 10 Gridworld
+  transition dataset.
+keywords:
+  - offline reinforcement learning
+  - conservative Q-learning
+  - DQN
+  - Double DQN
+  - Expected SARSA
+  - Gridworld

@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools==81.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gridworld-offline-rl"
+version = "2.0.0.dev0"
+description = "Reproducible offline reinforcement-learning baselines for Gridworld-10"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+  { name = "Chi Khoa Do" },
+]
+keywords = [
+  "offline reinforcement learning",
+  "conservative q-learning",
+  "dqn",
+  "pytorch",
+  "gridworld",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "numpy==2.4.4",
+  "pandas==3.0.2",
+  "torch==2.11.0",
+  "matplotlib==3.10.8",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build==1.5.0",
+  "pre-commit==4.6.1",
+  "pytest==9.1.1",
+  "pytest-cov==7.1.0",
+  "ruff==0.16.1",
+]
+
+[project.scripts]
+gridworld-rl = "gridworld_rl.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Dochikhoa2006/GridWorld-Deep-Reinforcement-Learning"
+Repository = "https://github.com/Dochikhoa2006/GridWorld-Deep-Reinforcement-Learning"
+Issues = "https://github.com/Dochikhoa2006/GridWorld-Deep-Reinforcement-Learning/issues"
+Changelog = "https://github.com/Dochikhoa2006/GridWorld-Deep-Reinforcement-Learning/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["gridworld_rl*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+minversion = "9.1"
+testpaths = ["tests"]
+addopts = [
+  "-ra",
+  "--strict-config",
+  "--strict-markers",
+  "--cov=src/gridworld_rl",
+  "--cov-report=term-missing:skip-covered",
+  "--cov-report=xml",
+  "--cov-fail-under=85",
+]
+
+[tool.coverage.run]
+relative_files = true
+source = ["src/gridworld_rl"]
+
+[tool.coverage.report]
+precision = 1
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.format]
+docstring-code-format = true

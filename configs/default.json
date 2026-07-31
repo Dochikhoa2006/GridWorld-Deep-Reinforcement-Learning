@@ -1,0 +1,39 @@
+{
+  "dataset": {
+    "eval_challenge": "Gridworld-10_Dataset/eval_challenge.csv",
+    "eval_solution": "Gridworld-10_Dataset/eval_solution.csv",
+    "num_actions": 4,
+    "num_states": 100,
+    "train": "Gridworld-10_Dataset/train.csv"
+  },
+  "network": {
+    "hidden_sizes": [
+      128,
+      64
+    ]
+  },
+  "output": {
+    "directory": "artifacts",
+    "overwrite": false,
+    "run_name": "latest"
+  },
+  "training": {
+    "algorithms": [
+      "dqn",
+      "double_dqn",
+      "expected_sarsa",
+      "cql"
+    ],
+    "batch_size": 128,
+    "cql_alpha": 1.0,
+    "device": "auto",
+    "epochs": 20,
+    "epsilon": 0.1,
+    "gamma": 0.99,
+    "gradient_clip_norm": 10.0,
+    "learning_rate": 0.001,
+    "num_workers": 0,
+    "seed": 42,
+    "target_update_interval": 250
+  }
+}

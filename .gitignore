@@ -1,7 +1,34 @@
-__pycache__/
+# Operating-system and editor files
 .DS_Store
-.venv/
+.idea/
+.vscode/
+*.swp
 
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Coverage and test reports
+.coverage
+coverage.xml
+htmlcov/
+
+# Packaging outputs
+build/
+dist/
+*.egg-info/
+
+# Local datasets and generated experiment outputs
 *.csv
+Gridworld-10_Dataset/
+artifacts/
+checkpoints/
+outputs/
+
+# Local helper scripts
 run_script
-Gridworld-10_Dataset
