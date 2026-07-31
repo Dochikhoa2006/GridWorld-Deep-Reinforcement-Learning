@@ -1,4 +1,4 @@
-# Five-Seed Diagnostic Benchmark
+# Five-Seed, 50-Epoch Release-Candidate Benchmark
 
 [README](../../README.md) ·
 [Reproducibility](../REPRODUCIBILITY.md) ·
@@ -6,25 +6,25 @@
 
 ## Status
 
-This is a **pre-release diagnostic snapshot**, generated locally on 31 July 2026 to
-exercise the complete multi-seed pipeline. It is included because the class-level
-results expose a substantive model limitation that overall accuracy alone would
-hide.
+This benchmark was generated locally on 31 July 2026 from clean source commit
+`7ba76df867462235b1efa6d22578438914e1b4b9` on branch
+`refactor/linkedin-showcase`. Every run recorded `git_dirty: false`; the aggregate
+manifest verified all 59 retained files after generation.
 
-The run occurred after the version 2.0 refactor was present in the working tree but
-before that refactor had an immutable commit. The configuration, data fingerprints,
-runtime, seed schedule, and generated metrics are known; the exact source state is
-not recoverable from a Git commit. Rerun from the eventual tagged release before
-using these values as a formal public benchmark.
+The results are release-candidate evidence, not a claim that the branch has already
+passed GitHub-hosted CI or been merged into `main`.
 
 ## Protocol
 
 ```bash
 gridworld-rl benchmark \
-  --config configs/default.json \
+  --data-dir Gridworld-10_Dataset \
+  --epochs 50 \
+  --device cpu \
+  --cql-alpha 1.0 \
   --seeds 11 22 33 44 55 \
-  --output-dir /tmp/gridworld-showcase-verification \
-  --name five-seed
+  --output-dir artifacts/benchmarks \
+  --name linkedin-50-epoch-five-seed
 ```
 
 | Dimension | Value |
@@ -36,9 +36,8 @@ gridworld-rl benchmark \
 | Unique full evaluation transitions | 534 (5,010 duplicate rows) |
 | Evaluation states with conflicting actions | 77 / 91 |
 | Logged state-action coverage | 346 / 400 pairs (86.5%) |
-| Logged action counts | a0: 2,940; a1: 8,428; a2: 2,919; a3: 7,885 |
 | Algorithms | DQN, Double DQN, Expected SARSA, CQL |
-| Epochs | 20 |
+| Epochs | 50 |
 | Network | One-hot state input; hidden widths 128 and 64; four outputs |
 | Optimizer | Adam, learning rate 0.001 |
 | Batch size | 128 |
@@ -61,14 +60,13 @@ eval_solution   a49bf745e7ac3d9db082e21010e0bc36e530c49b0c7255ad13c4273b234d19f1
 ## Aggregate action agreement
 
 Values are mean ± sample standard deviation across the five declared seeds.
-Minimum and maximum are shown to make the observed range explicit.
 
 | Algorithm | Mean ± std | Minimum | Maximum |
 | --- | ---: | ---: | ---: |
-| CQL | 41.57% ± 0.40% | 41.13% | 42.08% |
-| Expected SARSA | 41.06% ± 1.30% | 38.74% | 41.88% |
-| DQN | 39.73% ± 2.61% | 35.84% | 42.08% |
-| Double DQN | 37.68% ± 4.03% | 31.93% | 41.38% |
+| CQL | 41.38% ± 0.01% | 41.38% | 41.40% |
+| Expected SARSA | 33.79% ± 5.02% | 29.98% | 42.30% |
+| Double DQN | 32.97% ± 5.29% | 28.14% | 42.05% |
+| DQN | 31.37% ± 2.34% | 29.64% | 35.37% |
 | Training-majority reference (always action 1) | 39.23% | 39.23% | 39.23% |
 | Training per-state-mode reference | 41.63% | 41.63% | 41.63% |
 | Evaluation-fitted state-mode ceiling | 44.66% | 44.66% | 44.66% |
@@ -82,63 +80,46 @@ baseline.
 
 ## Per-action diagnostic
 
-The solution support is fixed across seeds: action 0 has 698 examples, action 1 has
-2,175, action 2 has 734, and action 3 has 1,937. Mean recall across seeds was:
+Mean recall ± sample standard deviation across seeds was:
 
 | Algorithm | Action 0 | Action 1 | Action 2 | Action 3 |
 | --- | ---: | ---: | ---: | ---: |
-| CQL | 0.00% | 40.63% | 0.14% | 73.32% |
-| Expected SARSA | 0.00% | 49.79% | 3.24% | 60.37% |
-| DQN | 0.03% | 46.67% | 3.76% | 59.87% |
-| Double DQN | 2.95% | 37.31% | 4.03% | 63.38% |
+| CQL | 0.57% ± 0.00% | 17.31% ± 0.28% | 0.19% ± 0.07% | 98.72% ± 0.28% |
+| Expected SARSA | 4.27% ± 5.34% | 44.00% ± 26.50% | 0.82% ± 1.16% | 45.46% ± 19.28% |
+| Double DQN | 5.79% ± 8.79% | 31.41% ± 33.80% | 1.55% ± 1.53% | 56.41% ± 23.41% |
+| DQN | 3.55% ± 4.63% | 27.74% ± 19.63% | 3.19% ± 4.57% | 56.15% ± 15.43% |
 
-The learned greedy policies strongly favor actions 1 and 3. In particular, CQL and
-Expected SARSA achieved zero recall for action 0 in every seed, and DQN's mean action
-0 recall was effectively zero. Action 2 recall was also poor for every method.
+The overall CQL score is exceptionally consistent, but the class-level evidence
+shows why that should not be described as broad policy stability: its learned
+greedy policy almost always recovers action 3 and nearly never recovers actions 0
+or 2. The other methods vary substantially across seeds and also perform poorly on
+actions 0 and 2.
 
-The logged training data itself is imbalanced toward actions 1 and 3, despite
-covering 346 of the 400 possible state-action pairs. Aggregate pair coverage says
-that a pair appears at least once; it does not describe visit frequency,
-state-conditional support quality, or how often a learned policy selects actions
-outside well-supported regions.
+The training data is imbalanced toward actions 1 and 3. More fundamentally, this
+evaluation split cannot estimate out-of-sample generalization: 99.04% of its rows
+exactly reproduce a transition present in training, it contains only 534 unique
+full transitions across 5,544 rows, and 77 of 91 states carry conflicting action
+labels. The 44.66% evaluation-fitted state-mode ceiling quantifies the ambiguity
+for any deterministic policy that receives only the state.
 
-More fundamentally, this evaluation split cannot estimate out-of-sample
-generalization: 99.04% of its rows exactly reproduce a transition present in
-training, it contains only 534 unique full transitions across 5,544 rows, and 77 of
-91 states carry conflicting action labels. The 44.66% evaluation-fitted state-mode
-ceiling quantifies how much ambiguity remains for any deterministic policy that
-receives only the state.
+## Interpretation
 
-This changes the interpretation of the aggregate table:
-
-- CQL had the highest mean agreement and lowest observed variation in this run, but
-  did not recover action 0 and almost never recovered action 2.
-- Always choosing the most frequent training action would score 39.23%, while a
-  per-state training mode scores 41.63%; no learned method exceeded that stronger
-  trivial reference on average.
-- The small mean differences do not establish superiority; no inferential test or
-  confidence interval was predeclared.
-- The final CQL objective includes a conservative penalty and is not numerically
-  comparable with the TD-only objectives.
-- A confusion matrix and class support are essential; one scalar can mask action
-  collapse.
+- CQL had the highest mean agreement and the smallest observed standard deviation,
+  but its per-action recall reveals a strongly collapsed action distribution.
+- No learned method exceeded the 41.63% training per-state-mode reference on mean
+  agreement.
+- The small evaluation ceiling and contradictory labels limit the attainable score
+  for deterministic state-only policies.
+- These five seeds describe this declared protocol. They do not establish
+  statistical superiority, safety, optimality, or online-return performance.
 
 ## Claim boundary
 
-This snapshot supports the engineering statement that the current pipeline can run
-all four methods over multiple seeds and persist aggregate and class-level
-diagnostics.
+This benchmark supports the engineering statement that the repository reproducibly
+runs four offline value-learning baselines across declared seeds and retains
+configuration, source, data, runtime, class-level, and integrity evidence.
 
-It does not support claims about:
-
-- online cumulative return;
-- out-of-sample policy generalization;
-- an optimal or safe policy;
-- statistical superiority;
-- transfer to another dataset or state representation; or
-- a clean-release reproduction.
-
-For a publishable rerun, follow the
-[reproducibility protocol](../REPRODUCIBILITY.md), record the source commit, preserve
-the complete benchmark directory, and avoid further tuning on the same evaluation
-solution.
+It does not support claims about online cumulative return, out-of-sample policy
+generalization, an optimal or safe policy, statistical superiority, or transfer to
+another dataset. See the [reproducibility protocol](../REPRODUCIBILITY.md) before
+publishing another comparison.

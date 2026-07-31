@@ -169,10 +169,13 @@ want an atomic replacement.
 
 ```bash
 gridworld-rl benchmark \
-  --config configs/default.json \
+  --data-dir Gridworld-10_Dataset \
+  --epochs 50 \
+  --device cpu \
+  --cql-alpha 1.0 \
   --seeds 11 22 33 44 55 \
   --output-dir artifacts/benchmarks \
-  --name showcase
+  --name linkedin-50-epoch-five-seed
 ```
 
 This creates one full run per seed plus aggregate JSON, a mean/standard-deviation
@@ -192,19 +195,20 @@ package builds, and both CLI entry points. The tests use synthetic fixtures and 
 not require the external Gridworld dataset. Use `python -m pytest -q` when only the
 test suite is needed.
 
-## Verified diagnostic snapshot
+## Verified five-seed release-candidate benchmark
 
-The full default configuration was exercised locally on 31 July 2026 across seeds
-11, 22, 33, 44, and 55. The table reports provided evaluation-split action agreement
-as mean ± sample standard deviation—not out-of-sample generalization or environment
-return.
+The real dataset was exercised locally for 50 epochs on CPU across seeds 11, 22,
+33, 44, and 55. All runs reference clean source commit `7ba76df`, record identical
+dataset and runtime provenance, and pass the generated integrity manifest. The table
+reports provided evaluation-split action agreement as mean ± sample standard
+deviation—not out-of-sample generalization or environment return.
 
 | Algorithm                                   | Action agreement |
 | ------------------------------------------- | ---------------: |
-| CQL                                         |  41.57% ± 0.40% |
-| Expected SARSA                              |  41.06% ± 1.30% |
-| DQN                                         |  39.73% ± 2.61% |
-| Double DQN                                  |  37.68% ± 4.03% |
+| CQL                                         |  41.38% ± 0.01% |
+| Expected SARSA                              |  33.79% ± 5.02% |
+| Double DQN                                  |  32.97% ± 5.29% |
+| DQN                                         |  31.37% ± 2.34% |
 | Training-majority reference (always action 1) |        39.23% |
 | Training per-state-mode reference             |        41.63% |
 | Evaluation-fitted state-mode ceiling          |        44.66% |
@@ -217,15 +221,14 @@ fair predictive baseline.
 
 The evaluation split is not substantively held out: 5,491 of 5,544 rows (99.04%)
 exactly match training transitions, 5,010 rows duplicate another evaluation row,
-and 77 of 91 states have conflicting action labels. Every method also had very low
-recall for actions 0 and 2; no learned mean exceeded the 41.63% training
-per-state-mode reference. This snapshot demonstrates why the pipeline preserves
-overlap, ambiguity, and class-level diagnostics; it does **not** establish
-algorithm superiority or out-of-sample policy quality.
-It was run as pre-release verification before the refactor had an immutable commit,
-so rerun it from a clean, tagged revision before citing it externally. The
-[benchmark note](docs/results/BENCHMARK.md) records the complete config, hashes,
-runtime, per-action recalls, and claim boundary.
+and 77 of 91 states have conflicting action labels. Every method had very low recall
+for actions 0 and 2; CQL's extremely small overall standard deviation coincided with
+98.72% mean recall for action 3 and near-zero recall for actions 0 and 2. No learned
+mean exceeded the 41.63% training per-state-mode reference. These results demonstrate
+why the pipeline preserves overlap, ambiguity, and class-level diagnostics; they do
+**not** establish algorithm superiority, broad policy stability, or out-of-sample
+policy quality. The [benchmark note](docs/results/BENCHMARK.md) records the complete
+config, commit, hashes, runtime, ranges, per-action recalls, and claim boundary.
 
 ## Evaluation: what the score means
 

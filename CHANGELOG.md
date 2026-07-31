@@ -37,8 +37,8 @@ tagged releases.
 - A non-root Docker runtime and pinned dependencies.
 - MIT license, security policy, contributing guide, citation metadata, architecture
   and reproducibility guides, a technical audit, and a migration guide.
-- A provenance-labelled five-seed diagnostic snapshot that preserves class-level
-  failure evidence instead of presenting only aggregate accuracy.
+- A provenance-labelled five-seed, 50-epoch real-data benchmark that preserves
+  class-level failure evidence instead of presenting only aggregate agreement.
 - Staged single-run publication with explicit atomic replacement, plus immutable
   benchmark destinations that protect completed evidence from accidental overwrite.
 - A `--data-dir` convenience option, option-only invocations that default to
