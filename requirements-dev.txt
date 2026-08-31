@@ -2,8 +2,8 @@
 -e .
 
 # Development and quality tooling
-build==1.5.0
-pre-commit==4.6.1
+build==1.6.0
+pre-commit==4.6.2
 pytest==9.1.1
 pytest-cov==7.1.0
-ruff==0.16.1
+ruff==0.16.5
