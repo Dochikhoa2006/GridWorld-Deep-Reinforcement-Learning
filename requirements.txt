@@ -1,5 +1,5 @@
 # Runtime dependencies
-numpy==2.4.4
-pandas==3.0.2
-torch==2.11.0
-matplotlib==3.10.8
+numpy==2.4.6
+pandas==3.0.5
+torch==2.13.0
+matplotlib==3.11.1
