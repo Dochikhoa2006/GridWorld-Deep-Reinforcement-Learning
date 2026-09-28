@@ -18,16 +18,31 @@ def predict_actions(
 ) -> np.ndarray:
     """Predict greedy actions without retaining an autograd graph."""
 
+    if (
+        isinstance(batch_size, bool)
+        or not isinstance(batch_size, int)
+        or batch_size <= 0
+    ):
+        raise ValueError("batch_size must be a positive integer.")
+
     # ``torch.tensor`` deliberately copies here: pandas can expose a read-only
     # NumPy view, which otherwise triggers a warning even though inference does
     # not mutate the input.
-    state_tensor = torch.tensor(np.asarray(states), dtype=torch.long)
+    state_tensor = (
+        states.detach().to(dtype=torch.long)
+        if isinstance(states, torch.Tensor)
+        else torch.tensor(np.asarray(states), dtype=torch.long)
+    )
     predictions: list[torch.Tensor] = []
+    was_training = model.training
     model.eval()
-    with torch.no_grad():
-        for start in range(0, len(state_tensor), batch_size):
-            batch = state_tensor[start : start + batch_size].to(device)
-            predictions.append(model(batch).argmax(dim=1).cpu())
+    try:
+        with torch.no_grad():
+            for start in range(0, len(state_tensor), batch_size):
+                batch = state_tensor[start : start + batch_size].to(device)
+                predictions.append(model(batch).argmax(dim=1).cpu())
+    finally:
+        model.train(was_training)
     if not predictions:
         return np.empty(0, dtype=np.int64)
     return torch.cat(predictions).numpy()

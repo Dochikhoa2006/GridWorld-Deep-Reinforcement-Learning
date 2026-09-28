@@ -205,6 +205,12 @@ package builds, and both CLI entry points. The tests use synthetic fixtures and 
 not require the external Gridworld dataset. Use `python -m pytest -q` when only the
 test suite is needed.
 
+For a quicker check while developing, run only the unit tests:
+
+```bash
+make test-unit
+```
+
 ## Verified five-seed release-candidate benchmark
 
 The real dataset was exercised locally for 50 epochs on CPU across seeds 11, 22,
