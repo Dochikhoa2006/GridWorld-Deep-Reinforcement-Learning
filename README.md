@@ -106,6 +106,13 @@ python -m pip install -e '.[dev]'
 On Windows PowerShell, activate the environment with
 `.venv\Scripts\Activate.ps1`.
 
+You can also run the CLI through the active Python environment with
+`python -m gridworld_rl`. To see the available commands, run:
+
+```bash
+python -m gridworld_rl --help
+```
+
 ### 2. Add the dataset
 
 Obtain
