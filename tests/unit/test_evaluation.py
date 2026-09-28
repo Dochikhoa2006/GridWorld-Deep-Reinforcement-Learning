@@ -5,7 +5,7 @@ import pytest
 import torch
 from torch import nn
 
-from gridworld_rl.evaluation import predict_actions
+from gridworld_rl.evaluation import classification_metrics, predict_actions
 
 
 class RecordingModel(nn.Module):
@@ -45,6 +45,27 @@ def test_empty_predictions_preserve_training_mode() -> None:
     assert result.dtype == np.int64
     assert model.training
     assert model.batch_lengths == []
+
+
+@pytest.mark.parametrize("field", ["targets", "predictions"])
+@pytest.mark.parametrize("labels", [[0.5], [np.nan], [np.inf], ["0"], [True]])
+def test_metrics_reject_invalid_labels(field: str, labels: list) -> None:
+    inputs = {"targets": np.array([0]), "predictions": np.array([0])}
+    inputs[field] = np.array(labels)
+    with pytest.raises(ValueError, match=field):
+        classification_metrics(**inputs)
+
+
+@pytest.mark.parametrize("num_actions", [0, -1, True, 2.5])
+def test_metrics_reject_invalid_action_count(num_actions: int) -> None:
+    with pytest.raises(ValueError, match="num_actions must be a positive integer"):
+        classification_metrics(np.array([0]), np.array([0]), num_actions=num_actions)
+
+
+def test_metrics_accept_integer_valued_floats() -> None:
+    result = classification_metrics(np.array([0.0, 1.0]), np.array([0.0, 0.0]))
+    assert result["accuracy"] == 0.5
+    assert result["per_action_support"] == {"0": 1, "1": 1, "2": 0, "3": 0}
 
 
 @pytest.mark.parametrize("batch_size", [0, -1, True, 1.5])

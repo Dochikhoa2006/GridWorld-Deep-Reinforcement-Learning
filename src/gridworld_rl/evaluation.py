@@ -56,18 +56,32 @@ def classification_metrics(
 ) -> dict[str, Any]:
     """Compute evaluation-split agreement, confusion, support, and action recall."""
 
-    actual = np.asarray(targets, dtype=np.int64)
-    predicted = np.asarray(predictions, dtype=np.int64)
+    if (
+        isinstance(num_actions, bool)
+        or not isinstance(num_actions, (int, np.integer))
+        or num_actions <= 0
+    ):
+        raise ValueError("num_actions must be a positive integer.")
+
+    actual = np.asarray(targets)
+    predicted = np.asarray(predictions)
     if actual.ndim != 1 or predicted.ndim != 1:
         raise ValueError("targets and predictions must be one-dimensional.")
     if len(actual) != len(predicted):
         raise ValueError("targets and predictions must have equal lengths.")
     if len(actual) == 0:
         raise ValueError("Cannot evaluate empty targets.")
+    for name, labels in (("targets", actual), ("predictions", predicted)):
+        if labels.dtype.kind not in "iuf" or not np.isfinite(labels).all():
+            raise ValueError(f"{name} must contain finite integer action labels.")
+        if labels.dtype.kind == "f" and (labels != np.floor(labels)).any():
+            raise ValueError(f"{name} must contain integer action labels.")
     if ((actual < 0) | (actual >= num_actions)).any():
         raise ValueError(f"targets must be in the range 0..{num_actions - 1}.")
     if ((predicted < 0) | (predicted >= num_actions)).any():
         raise ValueError(f"predictions must be in the range 0..{num_actions - 1}.")
+    actual = actual.astype(np.int64)
+    predicted = predicted.astype(np.int64)
 
     confusion = np.zeros((num_actions, num_actions), dtype=np.int64)
     np.add.at(confusion, (actual, predicted), 1)
