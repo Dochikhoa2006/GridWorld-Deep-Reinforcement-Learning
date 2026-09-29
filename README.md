@@ -389,6 +389,24 @@ artifacts/<run-name>/
 labels. `metrics.json` includes source revision metadata, package/runtime versions,
 dataset hashes and coverage diagnostics, optimization histories, and evaluation
 metrics.
+
+To predict actions for your own states, create a CSV with one `state` column and
+one integer state per row, then run:
+
+```bash
+gridworld-rl predict \
+  --checkpoint artifacts/smoke-seed-42/checkpoints/dqn.pt \
+  --input states.csv \
+  --output predictions.csv
+```
+
+The output keeps input row order and duplicates, with `state`, greedy `action`,
+`action_gap`, and one `q_<action>` column per action. State IDs must fall within
+the checkpoint's configured state range. Predictions use the lowest action index
+when Q-values tie. The output is written as a new file; an existing destination
+is never replaced. `--batch-size` and `--device` control inference. Q-values are
+model estimates, not probabilities. Keep this CSV outside retained run and
+benchmark directories so their integrity manifests remain valid.
 `manifest.json` records SHA-256 hashes for the other run files. Reports are derived
 from saved metrics and can be regenerated without retraining:
 

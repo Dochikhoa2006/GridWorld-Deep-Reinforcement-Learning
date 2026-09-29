@@ -11,7 +11,7 @@ from . import __version__
 from .config import ExperimentConfig
 
 COMMANDS = frozenset(
-    {"train", "report", "benchmark", "validate", "verify", "export-policy"}
+    {"train", "report", "benchmark", "validate", "verify", "export-policy", "predict"}
 )
 ROOT_ONLY_OPTIONS = frozenset({"-h", "--help", "--version"})
 
@@ -87,6 +87,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
     )
     export.add_argument("--batch-size", type=int, default=1024)
+    predict = subparsers.add_parser(
+        "predict", help="predict actions for states listed in a CSV file"
+    )
+    predict.add_argument("--checkpoint", required=True, help="saved model checkpoint")
+    predict.add_argument("--input", required=True, help="CSV with one state column")
+    predict.add_argument("--output", required=True, help="new predictions CSV file")
+    predict.add_argument(
+        "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
+    )
+    predict.add_argument("--batch-size", type=int, default=1024)
     return parser
 
 
@@ -268,6 +278,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 batch_size=args.batch_size,
             )
             print(f"Policy exported: {output.resolve()}")
+        elif args.command == "predict":
+            from .inference import predict_csv
+
+            output = predict_csv(
+                args.checkpoint,
+                args.input,
+                args.output,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+            print(f"Predictions exported: {output.resolve()}")
         elif args.command == "verify":
             from .integrity import verify_artifacts
 
