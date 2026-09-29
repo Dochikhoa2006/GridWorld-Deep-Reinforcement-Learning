@@ -5,8 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import torch
 from torch import nn
+
+from .data import REQUIRED_COLUMNS
 
 
 def predict_actions(
@@ -108,4 +111,52 @@ def classification_metrics(
         "per_action_support": {
             str(action): int(support[action]) for action in range(num_actions)
         },
+    }
+
+
+EVALUATION_SLICES = (
+    "exact_training_transition",
+    "seen_state_new_transition",
+    "unseen_state",
+)
+
+
+def overlap_sliced_agreement(
+    train: pd.DataFrame,
+    solution: pd.DataFrame,
+    targets: np.ndarray,
+    predictions: np.ndarray,
+) -> dict[str, dict[str, int | float | None]]:
+    """Partition evaluation rows by exposure to the fixed training dataset.
+
+    Exact matches use all five transition columns, including reward and done.
+    Every evaluation row belongs to exactly one slice. An empty slice has null
+    accuracy, not an invented zero or perfect score.
+    """
+
+    if len(solution) != len(targets) or len(targets) != len(predictions):
+        raise ValueError("Evaluation rows, targets, and predictions must align.")
+    columns = list(REQUIRED_COLUMNS)
+    train_rows = set(train.loc[:, columns].itertuples(index=False, name=None))
+    train_states = set(train["state"])
+    exact = np.fromiter(
+        (
+            row in train_rows
+            for row in solution.loc[:, columns].itertuples(index=False, name=None)
+        ),
+        dtype=bool,
+        count=len(solution),
+    )
+    seen = solution["state"].isin(train_states).to_numpy(dtype=bool)
+    masks = (exact, seen & ~exact, ~seen)
+    return {
+        name: {
+            "rows": int(mask.sum()),
+            "accuracy": (
+                float(np.mean(targets[mask] == predictions[mask]))
+                if mask.any()
+                else None
+            ),
+        }
+        for name, mask in zip(EVALUATION_SLICES, masks, strict=True)
     }

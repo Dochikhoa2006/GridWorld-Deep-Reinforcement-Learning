@@ -27,7 +27,11 @@ from .data import (
     make_dataloader,
     transition_diagnostics,
 )
-from .evaluation import classification_metrics, predict_actions
+from .evaluation import (
+    classification_metrics,
+    overlap_sliced_agreement,
+    predict_actions,
+)
 from .models import QNetwork
 from .report import generate_report
 from .reproducibility import (
@@ -296,6 +300,9 @@ def run_experiment(config: ExperimentConfig) -> Path:
                 eval_targets,
                 predictions,
                 num_actions=config.dataset.num_actions,
+            )
+            evaluation["overlap_slices"] = overlap_sliced_agreement(
+                train_frame, solution, eval_targets, predictions
             )
             checkpoint_path = checkpoints_dir / f"{algorithm}.pt"
             torch.save(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import shutil
 import uuid
 from collections.abc import Iterable
@@ -18,7 +19,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .config import ExperimentConfig
-from .report import DISPLAY_NAMES
+from .evaluation import EVALUATION_SLICES
+from .report import DISPLAY_NAMES, SLICE_NAMES
 from .reproducibility import sha256_file
 from .trainer import run_experiment
 
@@ -137,6 +139,48 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
             raise ValueError(
                 f"Benchmark runs have inconsistent recall actions for {algorithm}."
             )
+        sliced = [evaluation.get("overlap_slices") for evaluation in evaluations]
+        if any(value is not None for value in sliced):
+            if any(
+                not isinstance(value, dict) or set(value) != set(EVALUATION_SLICES)
+                for value in sliced
+            ):
+                raise ValueError(
+                    f"Benchmark overlap slices are inconsistent for {algorithm}."
+                )
+            for name in EVALUATION_SLICES:
+                results = [value[name] for value in sliced]
+                if (
+                    any(
+                        not isinstance(result, dict)
+                        or isinstance(result.get("rows"), bool)
+                        or not isinstance(result.get("rows"), int)
+                        or result["rows"] < 0
+                        or (
+                            result.get("accuracy") is not None
+                            and (
+                                isinstance(result["accuracy"], bool)
+                                or not isinstance(result["accuracy"], (int, float))
+                                or not math.isfinite(result["accuracy"])
+                                or not 0 <= result["accuracy"] <= 1
+                            )
+                        )
+                        or (result["rows"] == 0) != (result["accuracy"] is None)
+                        for result in results
+                    )
+                    or len({result["rows"] for result in results}) != 1
+                ):
+                    raise ValueError(
+                        f"Benchmark overlap slice {name} is inconsistent for {algorithm}."
+                    )
+            if any(
+                sum(value[name]["rows"] for name in EVALUATION_SLICES)
+                != evaluation["num_examples"]
+                for value, evaluation in zip(sliced, evaluations, strict=True)
+            ):
+                raise ValueError(
+                    f"Benchmark overlap slice rows do not cover evaluation for {algorithm}."
+                )
         algorithms[algorithm] = {
             "accuracy": _summary(evaluation["accuracy"] for evaluation in evaluations),
             "per_action_recall": {
@@ -151,6 +195,18 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
                 for run in metrics
             ),
         }
+        if sliced[0] is not None:
+            algorithms[algorithm]["overlap_slices"] = {
+                name: {
+                    "rows": sliced[0][name]["rows"],
+                    "accuracy": (
+                        _summary(value[name]["accuracy"] for value in sliced)
+                        if sliced[0][name]["rows"]
+                        else None
+                    ),
+                }
+                for name in EVALUATION_SLICES
+            }
 
     paired_comparisons = []
     for first, second in combinations(sorted(algorithm_sets[0]), 2):
@@ -292,6 +348,31 @@ def generate_benchmark_report(
             f"| {100 * accuracy['minimum']:.2f}% "
             f"| {100 * accuracy['maximum']:.2f}% |"
         )
+    if all(
+        "overlap_slices" in aggregate["algorithms"][name] for name in algorithm_names
+    ):
+        lines.extend(
+            [
+                "",
+                "## Agreement by training overlap",
+                "",
+                "Groups are disjoint and cover every evaluation row. "
+                "Empty groups are shown as N/A.",
+                "",
+                "| Algorithm | Group | Rows | Mean agreement | Sample std |",
+                "|---|---|---:|---:|---:|",
+            ]
+        )
+        for algorithm in algorithm_names:
+            for name in EVALUATION_SLICES:
+                result = aggregate["algorithms"][algorithm]["overlap_slices"][name]
+                accuracy = result["accuracy"]
+                mean = "N/A" if accuracy is None else f"{100 * accuracy['mean']:.2f}%"
+                std = "N/A" if accuracy is None else f"{100 * accuracy['std']:.2f}%"
+                lines.append(
+                    f"| {DISPLAY_NAMES.get(algorithm, algorithm)} "
+                    f"| {SLICE_NAMES[name]} | {result['rows']} | {mean} | {std} |"
+                )
     comparisons = aggregate.get("paired_comparisons", [])
     if comparisons:
         lines.extend(

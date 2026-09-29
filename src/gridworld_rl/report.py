@@ -12,6 +12,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .evaluation import EVALUATION_SLICES
 from .reproducibility import sha256_file
 
 DISPLAY_NAMES = {
@@ -19,6 +20,11 @@ DISPLAY_NAMES = {
     "double_dqn": "Double DQN",
     "expected_sarsa": "Expected SARSA",
     "cql": "CQL",
+}
+SLICE_NAMES = {
+    "exact_training_transition": "Exact training transition",
+    "seen_state_new_transition": "Seen state, new transition",
+    "unseen_state": "Unseen state",
 }
 
 
@@ -175,6 +181,32 @@ def generate_report(run_dir: str | Path) -> list[Path]:
             f"| {100 * evaluation['accuracy']:.2f}% "
             f"| {recall_values} |"
         )
+    if all(
+        "overlap_slices" in metrics["algorithms"][algorithm]["evaluation"]
+        for algorithm in algorithms
+    ):
+        lines.extend(
+            [
+                "",
+                "## Agreement by training overlap",
+                "",
+                "The groups are disjoint and cover every evaluation row. "
+                "An empty group is shown as N/A.",
+                "",
+                "| Algorithm | Group | Rows | Agreement |",
+                "|---|---|---:|---:|",
+            ]
+        )
+        for algorithm in algorithms:
+            slices = metrics["algorithms"][algorithm]["evaluation"]["overlap_slices"]
+            for name in EVALUATION_SLICES:
+                result = slices[name]
+                accuracy = result["accuracy"]
+                formatted = "N/A" if accuracy is None else f"{100 * accuracy:.2f}%"
+                lines.append(
+                    f"| {DISPLAY_NAMES.get(algorithm, algorithm)} "
+                    f"| {SLICE_NAMES[name]} | {result['rows']} | {formatted} |"
+                )
     lines.extend(
         [
             "",

@@ -197,6 +197,13 @@ workflow; the seed schedule and sample size should be chosen before inspecting
 results. Benchmark names are immutable: an existing destination is always refused,
 so choose a new name for every retained comparison.
 
+Experiment summaries and benchmark aggregates also break action agreement down by
+exact transitions found in training, new transitions at states seen in training,
+and states never seen in training. These three groups cover each evaluation row
+once. Empty groups report `N/A`; they do not imply zero accuracy. Benchmark tables
+show the mean and sample standard deviation across seeds for each nonempty group.
+These figures describe agreement on the provided split, not environment return.
+
 Benchmarks also compare every algorithm pair on matching seeds. The aggregate
 JSON's `paired_comparisons` contains each seed's agreement difference, its mean,
 sample standard deviation, minimum and maximum, and seed-level win/tie/loss counts.

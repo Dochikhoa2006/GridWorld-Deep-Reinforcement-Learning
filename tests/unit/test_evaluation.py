@@ -1,11 +1,67 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 from torch import nn
 
-from gridworld_rl.evaluation import classification_metrics, predict_actions
+from gridworld_rl.evaluation import (
+    classification_metrics,
+    overlap_sliced_agreement,
+    predict_actions,
+)
+
+
+def test_overlap_slices_partition_rows_and_weight_agreement():
+    train = pd.DataFrame(
+        {
+            "state": [0, 1],
+            "action": [0, 1],
+            "reward": [1.0, 2.0],
+            "next_state": [1, 2],
+            "done": [False, True],
+        }
+    )
+    solution = pd.DataFrame(
+        {
+            "state": [0, 0, 1, 1, 2, 0],
+            "action": [0, 0, 1, 0, 1, 0],
+            "reward": [1.0, 1.0, 2.0, 2.0, 0.0, 1.0],
+            "next_state": [1, 9, 2, 2, 3, 1],
+            "done": [False, False, True, True, False, False],
+        }
+    )
+    targets = solution["action"].to_numpy()
+    predictions = np.array([0, 1, 0, 0, 1, 0])
+    result = overlap_sliced_agreement(train, solution, targets, predictions)
+    assert result == {
+        "exact_training_transition": {"rows": 3, "accuracy": 2 / 3},
+        "seen_state_new_transition": {"rows": 2, "accuracy": 0.5},
+        "unseen_state": {"rows": 1, "accuracy": 1.0},
+    }
+    assert (
+        sum(group["rows"] * group["accuracy"] for group in result.values())
+        / len(targets)
+        == 4 / 6
+    )
+
+
+def test_empty_overlap_group_has_null_accuracy():
+    train = pd.DataFrame(
+        {
+            "state": [0],
+            "action": [0],
+            "reward": [0.0],
+            "next_state": [1],
+            "done": [False],
+        }
+    )
+    result = overlap_sliced_agreement(train, train.copy(), np.array([0]), np.array([0]))
+    assert result["seen_state_new_transition"] == {"rows": 0, "accuracy": None}
+    assert result["unseen_state"] == {"rows": 0, "accuracy": None}
+    with pytest.raises(ValueError, match="must align"):
+        overlap_sliced_agreement(train, train, np.array([0]), np.array([0, 1]))
 
 
 class RecordingModel(nn.Module):
