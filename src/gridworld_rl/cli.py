@@ -10,7 +10,7 @@ from pathlib import Path
 from . import __version__
 from .config import ExperimentConfig
 
-COMMANDS = frozenset({"train", "report", "benchmark", "validate"})
+COMMANDS = frozenset({"train", "report", "benchmark", "validate", "verify"})
 ROOT_ONLY_OPTIONS = frozenset({"-h", "--help", "--version"})
 
 
@@ -72,6 +72,10 @@ def build_parser() -> argparse.ArgumentParser:
         "validate", help="validate configured CSV schemas and evaluation alignment"
     )
     _add_config_argument(validate)
+    verify = subparsers.add_parser(
+        "verify", help="verify saved experiment or benchmark artifact integrity"
+    )
+    verify.add_argument("--run-dir", required=True, help="artifact directory to verify")
     return parser
 
 
@@ -225,9 +229,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"Benchmark complete: {benchmark_dir.resolve()}")
         elif args.command == "validate":
             print(_validate(_load_config(args.config, args.data_dir)))
+        elif args.command == "verify":
+            from .integrity import verify_artifacts
+
+            result = verify_artifacts(args.run_dir)
+            if not result.valid:
+                for category in ("missing", "modified", "unexpected"):
+                    for name in getattr(result, category):
+                        print(f"{category}: {name}", file=sys.stderr)
+                return 1
+            print(f"Integrity verified: {result.checked_files} files checked.")
         else:  # pragma: no cover - argparse enforces the choices
             parser.error(f"Unknown command: {args.command}")
-    except (FileExistsError, FileNotFoundError, ValueError, RuntimeError) as exc:
+    except (OSError, ValueError, RuntimeError) as exc:
         parser.exit(2, f"error: {exc}\n")
     return 0
 

@@ -11,6 +11,7 @@ from gridworld_rl.benchmark import aggregate_runs, run_benchmark
 from gridworld_rl.checkpoints import load_checkpoint
 from gridworld_rl.cli import main
 from gridworld_rl.config import ExperimentConfig
+from gridworld_rl.integrity import verify_artifacts
 from gridworld_rl.report import generate_report
 from gridworld_rl.reproducibility import sha256_file
 from gridworld_rl.trainer import run_experiment
@@ -126,6 +127,7 @@ def test_end_to_end_run_writes_loadable_reproducible_artifacts(tmp_path) -> None
     assert model(torch.tensor([0])).shape == (1, 4)
 
     regenerated = generate_report(run_dir)
+    assert verify_artifacts(run_dir).valid
     assert all(path.is_file() and path.stat().st_size > 0 for path in regenerated)
     manifest = json.loads((run_dir / "manifest.json").read_text())["sha256"]
     assert all(
@@ -198,6 +200,7 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
     }
     assert (benchmark_dir / "benchmark.png").stat().st_size > 0
     assert (benchmark_dir / "benchmark.md").is_file()
+    assert verify_artifacts(benchmark_dir).valid
     benchmark_summary = (benchmark_dir / "benchmark.md").read_text()
     assert "| Algorithm | Agreement mean | Agreement std" in benchmark_summary
     assert "| DQN |" in benchmark_summary

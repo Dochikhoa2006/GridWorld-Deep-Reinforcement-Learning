@@ -339,6 +339,22 @@ from saved metrics and can be regenerated without retraining:
 gridworld-rl report --run-dir artifacts/smoke-seed-42
 ```
 
+Verify a saved experiment or an entire multi-seed benchmark without changing files:
+
+```bash
+gridworld-rl verify --run-dir artifacts/smoke-seed-42
+gridworld-rl verify --run-dir artifacts/benchmarks/five-seed-study
+```
+
+Verification checks every SHA-256 entry, including nested run manifests in a
+benchmark, and reports all missing, modified, and unexpected files. Exit status
+is `0` for an intact artifact directory, `1` for file mismatches, and `2` for an
+invalid or unreadable manifest/directory. Empty directories are ignored. Manifest
+paths must be relative and canonical; symbolic links are rejected. Hashes detect
+changes relative to the manifest, but do not authenticate its author. Regenerating
+a report refreshes its run manifest; doing so inside a benchmark can invalidate
+the benchmark's original manifest.
+
 See [Architecture](docs/ARCHITECTURE.md) for component and data-flow details.
 
 ## Repository structure
