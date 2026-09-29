@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import shutil
+import uuid
 from collections.abc import Iterable
 from itertools import combinations
 from pathlib import Path
@@ -360,14 +361,17 @@ def run_benchmark(
     ):
         raise ValueError("name must be a single directory name.")
 
-    benchmark_dir = Path(output_directory) / name
-    runs_directory = benchmark_dir / "runs"
-    benchmark_dir.parent.mkdir(parents=True, exist_ok=True)
-    if benchmark_dir.exists():
+    destination = Path(output_directory) / name
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists() or destination.is_symlink():
         raise FileExistsError(
-            f"Benchmark directory already exists: {benchmark_dir}. "
+            f"Benchmark directory already exists: {destination}. "
             "Choose a new benchmark name to preserve immutable evidence."
         )
+    benchmark_dir = destination.parent / (
+        f".{destination.name}.in-progress-{uuid.uuid4().hex}"
+    )
+    runs_directory = benchmark_dir / "runs"
     benchmark_dir.mkdir()
     runs_directory.mkdir()
 
@@ -416,7 +420,14 @@ def run_benchmark(
             for path in sorted(expected_files)
         }
         _write_json(benchmark_dir / "manifest.json", {"sha256": manifest})
+        if destination.exists() or destination.is_symlink():
+            raise FileExistsError(
+                f"Benchmark directory appeared during training: {destination}. "
+                "The completed staging benchmark was not published."
+            )
+        benchmark_dir.replace(destination)
     except Exception:
-        shutil.rmtree(benchmark_dir)
+        if benchmark_dir.exists():
+            shutil.rmtree(benchmark_dir)
         raise
-    return benchmark_dir
+    return destination

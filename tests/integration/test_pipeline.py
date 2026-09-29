@@ -248,6 +248,10 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
     assert (benchmark_dir / "benchmark.png").stat().st_size > 0
     assert (benchmark_dir / "benchmark.md").is_file()
     assert verify_artifacts(benchmark_dir).valid
+    assert not list(benchmark_dir.parent.glob(".comparison.in-progress-*"))
+    assert json.loads((benchmark_dir / "aggregate_metrics.json").read_text())[
+        "run_directories"
+    ] == ["runs/seed-3", "runs/seed-5"]
     benchmark_summary = (benchmark_dir / "benchmark.md").read_text()
     assert "| Algorithm | Agreement mean | Agreement std" in benchmark_summary
     assert "| DQN |" in benchmark_summary
@@ -278,6 +282,50 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
             output_directory=tmp_path / "benchmarks",
             name="comparison",
         )
+
+
+@pytest.mark.parametrize("failure", ["seed", "report", "late_destination"])
+def test_benchmark_failure_never_publishes_partial_results(
+    tmp_path, monkeypatch, failure
+):
+    import gridworld_rl.benchmark as benchmark
+
+    config = _config(tmp_path, "unused")
+    parent = tmp_path / "benchmarks"
+    destination = parent / "unfinished"
+    original_run = benchmark.run_experiment
+    original_report = benchmark.generate_benchmark_report
+    calls = 0
+
+    def run_with_failure(run_config):
+        nonlocal calls
+        calls += 1
+        assert not destination.exists()
+        if failure == "seed" and calls == 2:
+            raise RuntimeError("seed failed")
+        return original_run(run_config)
+
+    def report_with_failure(directory, aggregate):
+        assert not destination.exists()
+        if failure == "report":
+            raise RuntimeError("report failed")
+        result = original_report(directory, aggregate)
+        if failure == "late_destination":
+            destination.mkdir()
+            (destination / "marker.txt").write_text("keep me")
+        return result
+
+    monkeypatch.setattr(benchmark, "run_experiment", run_with_failure)
+    monkeypatch.setattr(benchmark, "generate_benchmark_report", report_with_failure)
+    error = FileExistsError if failure == "late_destination" else RuntimeError
+    with pytest.raises(error):
+        run_benchmark(config, seeds=[3, 5], output_directory=parent, name="unfinished")
+    assert calls == 2
+    if failure == "late_destination":
+        assert (destination / "marker.txt").read_text() == "keep me"
+    else:
+        assert not destination.exists()
+    assert not list(parent.glob(".unfinished.in-progress-*"))
 
 
 def test_cli_train_report_and_benchmark_commands(tmp_path, capsys) -> None:

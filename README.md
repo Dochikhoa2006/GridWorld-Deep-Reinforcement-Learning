@@ -189,7 +189,10 @@ gridworld-rl benchmark \
 ```
 
 This creates one full run per seed plus aggregate JSON, a mean/standard-deviation
-figure, a Markdown summary, and integrity manifests. Five seeds illustrate the
+figure, a Markdown summary, and integrity manifests. Benchmark artifacts are built
+in a hidden staging directory and published at the requested path after all
+seeded runs, aggregation, reports, and hashes complete. Failures remove the
+staging directory and leave the requested path untouched. Five seeds illustrate the
 workflow; the seed schedule and sample size should be chosen before inspecting
 results. Benchmark names are immutable: an existing destination is always refused,
 so choose a new name for every retained comparison.
