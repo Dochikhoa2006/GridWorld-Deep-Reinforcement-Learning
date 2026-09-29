@@ -99,6 +99,11 @@ def _add_training_override_arguments(
         "--learning-rate", type=float, help="override training.learning_rate"
     )
     parser.add_argument("--batch-size", type=int, help="override training.batch_size")
+    parser.add_argument(
+        "--gradient-accumulation-steps",
+        type=int,
+        help="minibatches per optimizer update (default: 1)",
+    )
     parser.add_argument("--gamma", type=float, help="override training.gamma")
     parser.add_argument("--epsilon", type=float, help="override training.epsilon")
     parser.add_argument("--device", help="override training.device (auto/cpu/cuda/mps)")
@@ -125,6 +130,7 @@ def _apply_training_overrides(
         "epochs",
         "learning_rate",
         "batch_size",
+        "gradient_accumulation_steps",
         "gamma",
         "epsilon",
         "device",

@@ -31,6 +31,7 @@ class TrainingConfig:
     epochs: int = 20
     learning_rate: float = 0.001
     batch_size: int = 128
+    gradient_accumulation_steps: int = 1
     gamma: float = 0.99
     epsilon: float = 0.1
     cql_alpha: float = 1.0
@@ -146,11 +147,13 @@ class ExperimentConfig:
             for value in (
                 t.epochs,
                 t.batch_size,
+                t.gradient_accumulation_steps,
                 t.target_update_interval,
             )
         ):
             raise ValueError(
-                "training.epochs, training.batch_size, and "
+                "training.epochs, training.batch_size, "
+                "training.gradient_accumulation_steps, and "
                 "training.target_update_interval must be positive integers."
             )
         if (

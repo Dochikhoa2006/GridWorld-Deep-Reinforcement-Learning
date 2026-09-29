@@ -281,7 +281,8 @@ specification. Major controls include:
 | `training.seed`                   | Python, NumPy, PyTorch, and data-order seed                 |
 | `training.epochs`                 | Full passes over the fixed transition dataset               |
 | `training.learning_rate`          | Adam learning rate                                          |
-| `training.batch_size`             | Transitions per optimizer update                            |
+| `training.batch_size`             | Transitions per minibatch                                   |
+| `training.gradient_accumulation_steps` | Minibatches per optimizer update (default: 1)           |
 | `training.gamma`                  | Bellman discount factor                                     |
 | `training.epsilon`                | Expected SARSA epsilon-greedy probability                   |
 | `training.cql_alpha`              | Conservative penalty weight                                 |
@@ -293,6 +294,19 @@ specification. Major controls include:
 
 The CLI exposes common single-run overrides; edit or copy the JSON config for a fully
 versioned experiment definition. Unknown fields and invalid ranges are rejected.
+
+To use an effective batch of 512 transitions while processing 128 at a time:
+
+```bash
+gridworld-rl train --batch-size 128 --gradient-accumulation-steps 4 --run-name accumulated
+```
+
+The same override is available for `benchmark`. Gradients are weighted by the
+number of transitions, and an incomplete accumulation window is applied at the
+end of each epoch. Gradient clipping, `global_steps`, and target-network updates
+operate on optimizer updates. Epoch losses are averages over transitions, so a
+short final minibatch is weighted correctly. The default of 1 keeps one optimizer
+update per minibatch.
 
 ## Artifact contract
 

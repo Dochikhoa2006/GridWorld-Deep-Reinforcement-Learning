@@ -37,11 +37,14 @@ from .reproducibility import (
 )
 
 
-def _mean_history(batch_metrics: list[dict[str, float]]) -> dict[str, float]:
+def _mean_history(
+    batch_metrics: list[tuple[int, dict[str, float]]],
+) -> dict[str, float]:
     if not batch_metrics:
         raise RuntimeError("Training produced no batches.")
     return {
-        key: float(np.mean([batch[key] for batch in batch_metrics]))
+        key: sum(size * batch[key] for size, batch in batch_metrics)
+        / sum(size for size, _batch in batch_metrics)
         for key in ("td_loss", "cql_loss", "total_loss")
     }
 
@@ -79,10 +82,12 @@ def train_model(
     }
     global_step = 0
     target_syncs = 1
+    accumulation_steps = config.training.gradient_accumulation_steps
     model.train()
     for _epoch in range(config.training.epochs):
-        epoch_metrics: list[dict[str, float]] = []
-        for batch in loader:
+        epoch_metrics: list[tuple[int, dict[str, float]]] = []
+        optimizer.zero_grad(set_to_none=True)
+        for batch_index, batch in enumerate(loader):
             states = batch["state"].to(device)
             actions = batch["action"].to(device)
             rewards = batch["reward"].to(device)
@@ -106,17 +111,27 @@ def train_model(
                 config.training.cql_alpha,
             )
 
-            optimizer.zero_grad(set_to_none=True)
-            loss.backward()
-            nn.utils.clip_grad_norm_(
-                model.parameters(), config.training.gradient_clip_norm
+            # Weight by transitions, including a short final minibatch/window.
+            # Each window has the same objective as its concatenated full batch.
+            window_start = (batch_index // accumulation_steps) * accumulation_steps
+            window_samples = min(
+                accumulation_steps * config.training.batch_size,
+                len(dataset) - window_start * config.training.batch_size,
             )
-            optimizer.step()
-            global_step += 1
-            if global_step % config.training.target_update_interval == 0:
-                target_model.load_state_dict(model.state_dict())
-                target_syncs += 1
-            epoch_metrics.append(parts)
+            (loss * (len(states) / window_samples)).backward()
+            if (batch_index + 1) % accumulation_steps == 0 or batch_index + 1 == len(
+                loader
+            ):
+                nn.utils.clip_grad_norm_(
+                    model.parameters(), config.training.gradient_clip_norm
+                )
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+                global_step += 1
+                if global_step % config.training.target_update_interval == 0:
+                    target_model.load_state_dict(model.state_dict())
+                    target_syncs += 1
+            epoch_metrics.append((len(states), parts))
 
         averages = _mean_history(epoch_metrics)
         for key, value in averages.items():
