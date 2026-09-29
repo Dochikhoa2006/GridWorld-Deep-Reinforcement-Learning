@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import pickle
 from pathlib import Path
 from typing import Any
 
 import torch
 
+from .config import SUPPORTED_ALGORITHMS
 from .models import QNetwork
 
 
@@ -16,7 +18,10 @@ def load_checkpoint(
     checkpoint_path = Path(path)
     if not checkpoint_path.is_file():
         raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_path}")
-    payload = torch.load(checkpoint_path, map_location=device, weights_only=True)
+    try:
+        payload = torch.load(checkpoint_path, map_location=device, weights_only=True)
+    except (pickle.UnpicklingError, EOFError) as exc:
+        raise ValueError(f"Invalid checkpoint: {checkpoint_path}") from exc
     required = {
         "algorithm",
         "model_state_dict",
@@ -27,10 +32,37 @@ def load_checkpoint(
     if not isinstance(payload, dict) or not required.issubset(payload):
         missing = sorted(required - set(payload if isinstance(payload, dict) else ()))
         raise ValueError(f"Invalid checkpoint {checkpoint_path}; missing: {missing}")
+    version = payload.get("format_version", 1)
+    if type(version) is not int or version != 1:
+        raise ValueError("Unsupported checkpoint format_version; expected 1.")
+    if payload["algorithm"] not in SUPPORTED_ALGORITHMS:
+        raise ValueError("Checkpoint contains an unsupported algorithm.")
+    for field in ("num_states", "num_actions"):
+        value = payload[field]
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 1:
+            raise ValueError(f"Checkpoint {field} must be an integer greater than 1.")
+    network = payload["network"]
+    hidden_sizes = network.get("hidden_sizes") if isinstance(network, dict) else None
+    if (
+        not isinstance(hidden_sizes, (list, tuple))
+        or not hidden_sizes
+        or any(
+            isinstance(size, bool) or not isinstance(size, int) or size <= 0
+            for size in hidden_sizes
+        )
+    ):
+        raise ValueError(
+            "Checkpoint network.hidden_sizes must contain positive integers."
+        )
+    if not isinstance(payload["model_state_dict"], dict) or any(
+        not isinstance(value, torch.Tensor) or not torch.isfinite(value).all()
+        for value in payload["model_state_dict"].values()
+    ):
+        raise ValueError("Checkpoint model_state_dict must contain finite tensors.")
     model = QNetwork(
-        num_states=int(payload["num_states"]),
-        num_actions=int(payload["num_actions"]),
-        hidden_sizes=payload["network"]["hidden_sizes"],
+        num_states=payload["num_states"],
+        num_actions=payload["num_actions"],
+        hidden_sizes=hidden_sizes,
     )
     model.load_state_dict(payload["model_state_dict"])
     model.to(device)

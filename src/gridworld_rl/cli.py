@@ -10,7 +10,9 @@ from pathlib import Path
 from . import __version__
 from .config import ExperimentConfig
 
-COMMANDS = frozenset({"train", "report", "benchmark", "validate", "verify"})
+COMMANDS = frozenset(
+    {"train", "report", "benchmark", "validate", "verify", "export-policy"}
+)
 ROOT_ONLY_OPTIONS = frozenset({"-h", "--help", "--version"})
 
 
@@ -76,6 +78,15 @@ def build_parser() -> argparse.ArgumentParser:
         "verify", help="verify saved experiment or benchmark artifact integrity"
     )
     verify.add_argument("--run-dir", required=True, help="artifact directory to verify")
+    export = subparsers.add_parser(
+        "export-policy", help="export Q-values and greedy actions for every state"
+    )
+    export.add_argument("--checkpoint", required=True, help="saved model checkpoint")
+    export.add_argument("--output", required=True, help="new JSON output file")
+    export.add_argument(
+        "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
+    )
+    export.add_argument("--batch-size", type=int, default=1024)
     return parser
 
 
@@ -229,6 +240,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"Benchmark complete: {benchmark_dir.resolve()}")
         elif args.command == "validate":
             print(_validate(_load_config(args.config, args.data_dir)))
+        elif args.command == "export-policy":
+            from .policy import export_policy
+
+            output = export_policy(
+                args.checkpoint,
+                args.output,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+            print(f"Policy exported: {output.resolve()}")
         elif args.command == "verify":
             from .integrity import verify_artifacts
 

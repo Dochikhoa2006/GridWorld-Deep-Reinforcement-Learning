@@ -367,6 +367,31 @@ the benchmark's original manifest.
 
 See [Architecture](docs/ARCHITECTURE.md) for component and data-flow details.
 
+### Export a trained policy
+
+Inspect every discrete state without training again or supplying evaluation data:
+
+```bash
+gridworld-rl export-policy \
+  --checkpoint artifacts/smoke-seed-42/checkpoints/dqn.pt \
+  --output artifacts/dqn-policy.json \
+  --batch-size 256
+```
+
+The JSON includes checkpoint SHA-256 provenance, model dimensions, and a `policy`
+array in ascending state order. Each row contains `state`, the greedy `action`,
+`q_values` in action-index order, `action_gap` (largest minus second-largest
+Q-value), and `num_greedy_actions` (exact ties at the maximum). Ties select the
+lowest action index. Q-values and action gaps are model estimates, not calibrated
+probabilities or confidence intervals. The export covers unobserved states too;
+it does not establish that those predictions are reliable.
+
+Inference defaults to CPU; `--device auto`, `cuda`, or `mps` selects another
+available device. Checkpoint dimensions, architecture, version, and finite weights
+are validated before export. Existing output paths are refused, and the completed
+JSON is published atomically. Store exports outside immutable run/benchmark
+directories to keep their integrity manifests valid.
+
 ## Repository structure
 
 ```text
