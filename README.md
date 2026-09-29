@@ -194,6 +194,16 @@ workflow; the seed schedule and sample size should be chosen before inspecting
 results. Benchmark names are immutable: an existing destination is always refused,
 so choose a new name for every retained comparison.
 
+Benchmarks also compare every algorithm pair on matching seeds. The aggregate
+JSON's `paired_comparisons` contains each seed's agreement difference, its mean,
+sample standard deviation, minimum and maximum, and seed-level win/tie/loss counts.
+Pairs are ordered alphabetically; differences are first minus second. The Markdown
+summary expresses differences in percentage points, with positive values favoring
+the first algorithm. These are descriptive comparisons, not significance tests.
+One seed produces a standard deviation of zero; a single algorithm produces no
+pairs. Aggregation rejects duplicate seeds, mismatched seed metadata, and invalid
+agreement values.
+
 ### 6. Run the test suite
 
 ```bash

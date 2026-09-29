@@ -6,6 +6,7 @@ import copy
 import json
 import shutil
 from collections.abc import Iterable
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +46,11 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
 
     if not run_dirs or len(run_dirs) != len(seeds):
         raise ValueError("run_dirs and seeds must be non-empty and equally sized.")
+    if any(
+        isinstance(seed, bool) or not isinstance(seed, int) or seed < 0
+        for seed in seeds
+    ) or len(set(seeds)) != len(seeds):
+        raise ValueError("Benchmark seeds must be distinct non-negative integers.")
     metrics = [
         json.loads((run_dir / "metrics.json").read_text(encoding="utf-8"))
         for run_dir in run_dirs
@@ -56,9 +62,20 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
     configured_seeds = [
         configuration["training"]["seed"] for configuration in configurations
     ]
-    if configured_seeds != seeds:
+    if configured_seeds != seeds or any(
+        isinstance(seed, bool) or not isinstance(seed, int) for seed in configured_seeds
+    ):
         raise ValueError(
             "Benchmark seed metadata does not match the declared seed schedule."
+        )
+    if any(
+        isinstance(run.get("seed"), bool)
+        or not isinstance(run.get("seed"), int)
+        or run["seed"] != seed
+        for run, seed in zip(metrics, seeds, strict=True)
+    ):
+        raise ValueError(
+            "Benchmark metrics seeds do not match the declared seed schedule."
         )
     normalized_configurations = []
     for configuration in configurations:
@@ -99,6 +116,15 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
     algorithms: dict[str, Any] = {}
     for algorithm in sorted(algorithm_sets[0]):
         evaluations = [run["algorithms"][algorithm]["evaluation"] for run in metrics]
+        if any(
+            isinstance(evaluation.get("accuracy"), bool)
+            or not isinstance(evaluation.get("accuracy"), (int, float))
+            or not 0 <= evaluation["accuracy"] <= 1
+            for evaluation in evaluations
+        ):
+            raise ValueError(
+                f"Benchmark accuracy must be finite and between 0 and 1 for {algorithm}."
+            )
         recall_actions = sorted(
             evaluations[0]["per_action_recall"],
             key=int,
@@ -125,11 +151,35 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
             ),
         }
 
+    paired_comparisons = []
+    for first, second in combinations(sorted(algorithm_sets[0]), 2):
+        # Pair within each run; never compare independently sorted score lists.
+        differences = [
+            run["algorithms"][first]["evaluation"]["accuracy"]
+            - run["algorithms"][second]["evaluation"]["accuracy"]
+            for run in metrics
+        ]
+        paired_comparisons.append(
+            {
+                "first_algorithm": first,
+                "second_algorithm": second,
+                "accuracy_difference": _summary(differences),
+                "per_seed": [
+                    {"seed": seed, "accuracy_difference": difference}
+                    for seed, difference in zip(seeds, differences, strict=True)
+                ],
+                "wins": sum(value > 0 for value in differences),
+                "ties": sum(value == 0 for value in differences),
+                "losses": sum(value < 0 for value in differences),
+            }
+        )
+
     return {
         "schema_version": 1,
         "seeds": seeds,
         "num_runs": len(run_dirs),
         "algorithms": algorithms,
+        "paired_comparisons": paired_comparisons,
         "dataset_sha256": metrics[0]["dataset"]["sha256"],
         "evaluation_split_diagnostics": metrics[0]["evaluation_split_diagnostics"],
         "provenance": {field: metrics[0].get(field) for field in provenance_fields},
@@ -241,6 +291,36 @@ def generate_benchmark_report(
             f"| {100 * accuracy['minimum']:.2f}% "
             f"| {100 * accuracy['maximum']:.2f}% |"
         )
+    comparisons = aggregate.get("paired_comparisons", [])
+    if comparisons:
+        lines.extend(
+            [
+                "",
+                "## Paired seed comparisons",
+                "",
+                "Differences are first minus second on matching seeds, in percentage "
+                "points (pp). Positive values favor the first algorithm. Wins, ties, "
+                "and losses count seeds; ties require equal agreement. These are "
+                "descriptive comparisons, not significance tests.",
+                "",
+                "| First | Second | Mean difference (pp) | Sample std (pp) "
+                "| Minimum (pp) | Maximum (pp) | Wins / Ties / Losses |",
+                "|---|---|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for comparison in comparisons:
+            first = comparison["first_algorithm"]
+            second = comparison["second_algorithm"]
+            difference = comparison["accuracy_difference"]
+            lines.append(
+                f"| {DISPLAY_NAMES.get(first, first)} "
+                f"| {DISPLAY_NAMES.get(second, second)} "
+                f"| {100 * difference['mean']:+.2f} "
+                f"| {100 * difference['std']:.2f} "
+                f"| {100 * difference['minimum']:+.2f} "
+                f"| {100 * difference['maximum']:+.2f} "
+                f"| {comparison['wins']} / {comparison['ties']} / {comparison['losses']} |"
+            )
     lines.extend(
         [
             "",
