@@ -30,6 +30,9 @@ class TrainingConfig:
     algorithms: list[str] = field(default_factory=lambda: list(SUPPORTED_ALGORITHMS))
     epochs: int = 20
     learning_rate: float = 0.001
+    learning_rate_schedule: str = "constant"
+    warmup_steps: int = 0
+    min_learning_rate_ratio: float = 0.0
     batch_size: int = 128
     gradient_accumulation_steps: int = 1
     gamma: float = 0.99
@@ -102,6 +105,25 @@ class ExperimentConfig:
 
     def validate(self) -> None:
         t = self.training
+        if t.learning_rate_schedule not in ("constant", "cosine"):
+            raise ValueError(
+                "training.learning_rate_schedule must be constant or cosine."
+            )
+        if (
+            isinstance(t.warmup_steps, bool)
+            or not isinstance(t.warmup_steps, int)
+            or t.warmup_steps < 0
+        ):
+            raise ValueError("training.warmup_steps must be a non-negative integer.")
+        if (
+            isinstance(t.min_learning_rate_ratio, bool)
+            or not isinstance(t.min_learning_rate_ratio, (int, float))
+            or not math.isfinite(t.min_learning_rate_ratio)
+            or not 0 <= t.min_learning_rate_ratio <= 1
+        ):
+            raise ValueError(
+                "training.min_learning_rate_ratio must be between 0 and 1."
+            )
         if any(
             not isinstance(path, str) or not path
             for path in (

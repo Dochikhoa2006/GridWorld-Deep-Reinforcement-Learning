@@ -114,6 +114,15 @@ def _add_training_override_arguments(
         "--learning-rate", type=float, help="override training.learning_rate"
     )
     parser.add_argument("--batch-size", type=int, help="override training.batch_size")
+    parser.add_argument("--learning-rate-schedule", choices=["constant", "cosine"])
+    parser.add_argument(
+        "--warmup-steps", type=int, help="optimizer updates for linear warmup"
+    )
+    parser.add_argument(
+        "--min-learning-rate-ratio",
+        type=float,
+        help="cosine floor as a fraction of the base rate",
+    )
     parser.add_argument(
         "--gradient-accumulation-steps",
         type=int,
@@ -144,6 +153,9 @@ def _apply_training_overrides(
     for name in (
         "epochs",
         "learning_rate",
+        "learning_rate_schedule",
+        "warmup_steps",
+        "min_learning_rate_ratio",
         "batch_size",
         "gradient_accumulation_steps",
         "gamma",

@@ -290,7 +290,10 @@ specification. Major controls include:
 | `training.algorithms`             | Algorithms included in a run                                |
 | `training.seed`                   | Python, NumPy, PyTorch, and data-order seed                 |
 | `training.epochs`                 | Full passes over the fixed transition dataset               |
-| `training.learning_rate`          | Adam learning rate                                          |
+| `training.learning_rate`          | Base Adam learning rate                                     |
+| `training.learning_rate_schedule` | `constant` (default) or `cosine`                             |
+| `training.warmup_steps`           | Linear warmup optimizer updates (default: 0)                |
+| `training.min_learning_rate_ratio` | Cosine endpoint as a fraction of the base rate (default: 0) |
 | `training.batch_size`             | Transitions per minibatch                                   |
 | `training.gradient_accumulation_steps` | Minibatches per optimizer update (default: 1)           |
 | `training.gamma`                  | Bellman discount factor                                     |
@@ -317,6 +320,17 @@ end of each epoch. Gradient clipping, `global_steps`, and target-network updates
 operate on optimizer updates. Epoch losses are averages over transitions, so a
 short final minibatch is weighted correctly. The default of 1 keeps one optimizer
 update per minibatch.
+
+Optional learning-rate warmup and cosine decay are available for both `train` and
+`benchmark`, for example `--learning-rate-schedule cosine --warmup-steps 10
+--min-learning-rate-ratio 0.1`. Warmup uses rates `base / warmup_steps` through
+`base`; subsequent updates decay to the configured floor on the final update.
+Without warmup, cosine starts at the base rate (a single-update run uses that
+rate). Warmup must be shorter than the total optimizer-update count. Schedules
+advance only when the optimizer steps, including partial accumulation windows.
+The constant schedule optionally warms up, then holds the base rate; its floor
+ratio has no effect. `training_history.learning_rate` records the last rate used
+in each epoch. Defaults preserve constant-rate training.
 
 ## Artifact contract
 

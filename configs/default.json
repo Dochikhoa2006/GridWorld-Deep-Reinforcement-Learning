@@ -33,8 +33,11 @@
     "gradient_accumulation_steps": 1,
     "gradient_clip_norm": 10.0,
     "learning_rate": 0.001,
+    "learning_rate_schedule": "constant",
+    "min_learning_rate_ratio": 0.0,
     "num_workers": 0,
     "seed": 42,
-    "target_update_interval": 250
+    "target_update_interval": 250,
+    "warmup_steps": 0
   }
 }

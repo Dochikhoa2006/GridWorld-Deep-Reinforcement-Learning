@@ -14,8 +14,9 @@ from gridworld_rl.trainer import _mean_history, train_model
 
 
 @pytest.mark.parametrize("algorithm", SUPPORTED_ALGORITHMS)
+@pytest.mark.parametrize("schedule", ["constant", "cosine"])
 @pytest.mark.parametrize("rows,accumulation", [(11, 2), (5, 4), (12, 2), (7, 1)])
-def test_accumulation_matches_full_batches(algorithm, rows, accumulation):
+def test_accumulation_matches_full_batches(algorithm, schedule, rows, accumulation):
     dataset = TransitionDataset(
         pd.DataFrame(
             {
@@ -32,6 +33,9 @@ def test_accumulation_matches_full_batches(algorithm, rows, accumulation):
             "network": {"hidden_sizes": [8]},
             "training": {
                 "epochs": 3,
+                "learning_rate_schedule": schedule,
+                "warmup_steps": 1 if schedule == "cosine" else 0,
+                "min_learning_rate_ratio": 0.1,
                 "batch_size": 3,
                 "gradient_accumulation_steps": accumulation,
                 "target_update_interval": 2,

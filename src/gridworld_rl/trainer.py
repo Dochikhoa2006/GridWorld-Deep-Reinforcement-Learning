@@ -35,6 +35,7 @@ from .reproducibility import (
     sha256_file,
     source_revision,
 )
+from .schedules import learning_rate_for_step
 
 
 def _mean_history(
@@ -57,6 +58,15 @@ def train_model(
 ) -> tuple[QNetwork, dict[str, Any]]:
     """Train one seeded baseline and return its model and history."""
 
+    config.validate()
+    effective_batch_size = (
+        config.training.batch_size * config.training.gradient_accumulation_steps
+    )
+    total_steps = config.training.epochs * (
+        (len(dataset) + effective_batch_size - 1) // effective_batch_size
+    )
+    # Validate the schedule before constructing models or doing any training.
+    learning_rate_for_step(config.training, 0, total_steps)
     set_global_seed(config.training.seed)
     model = QNetwork(
         config.dataset.num_states,
@@ -79,6 +89,7 @@ def train_model(
         "td_loss": [],
         "cql_loss": [],
         "total_loss": [],
+        "learning_rate": [],
     }
     global_step = 0
     target_syncs = 1
@@ -125,6 +136,11 @@ def train_model(
                 nn.utils.clip_grad_norm_(
                     model.parameters(), config.training.gradient_clip_norm
                 )
+                learning_rate = learning_rate_for_step(
+                    config.training, global_step, total_steps
+                )
+                for group in optimizer.param_groups:
+                    group["lr"] = learning_rate
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
                 global_step += 1
@@ -136,6 +152,7 @@ def train_model(
         averages = _mean_history(epoch_metrics)
         for key, value in averages.items():
             history[key].append(value)
+        history["learning_rate"].append(optimizer.param_groups[0]["lr"])
 
     return model, {
         "training_history": history,
