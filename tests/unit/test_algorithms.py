@@ -175,6 +175,27 @@ def test_classification_metrics_include_confusion_and_zero_support_recall() -> N
         "2": 0.0,
         "3": 0.0,
     }
+    assert result["per_action_precision"] == {
+        "0": 1.0,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0,
+    }
+    assert result["per_action_f1"] == pytest.approx(
+        {
+            "0": 2 / 3,
+            "1": 0.5,
+            "2": 0.0,
+            "3": 0.0,
+        }
+    )
+    assert result["per_action_prediction_count"] == {
+        "0": 1,
+        "1": 2,
+        "2": 1,
+        "3": 0,
+    }
+    assert result["macro_f1"] == pytest.approx(7 / 12)
 
 
 def test_q_network_accepts_discrete_states() -> None:

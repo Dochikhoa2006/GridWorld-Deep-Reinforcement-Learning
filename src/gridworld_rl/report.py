@@ -128,6 +128,12 @@ def generate_report(run_dir: str | Path) -> list[Path]:
     first_evaluation = metrics["algorithms"][algorithms[0]]["evaluation"]
     action_keys = sorted(first_evaluation["per_action_recall"], key=int)
     recall_headers = " | ".join(f"Recall a{action}" for action in action_keys)
+    has_f1 = all(
+        "macro_f1" in metrics["algorithms"][algorithm]["evaluation"]
+        for algorithm in algorithms
+    )
+    f1_header = "Macro F1 | " if has_f1 else ""
+    f1_separator = "---:|" if has_f1 else ""
     lines = [
         "# Experiment summary",
         "",
@@ -167,8 +173,8 @@ def generate_report(run_dir: str | Path) -> list[Path]:
             f"`{100 * metrics['evaluation_split_diagnostics']['evaluation_state_mode_ceiling']:.2f}%`"
         ),
         "",
-        f"| Algorithm | Agreement | {recall_headers} |",
-        f"|---|---:|{'---:|' * len(action_keys)}",
+        f"| Algorithm | Agreement | {f1_header}{recall_headers} |",
+        f"|---|---:|{f1_separator}{'---:|' * len(action_keys)}",
     ]
     for algorithm in algorithms:
         evaluation = metrics["algorithms"][algorithm]["evaluation"]
@@ -176,11 +182,35 @@ def generate_report(run_dir: str | Path) -> list[Path]:
         recall_values = " | ".join(
             f"{100 * recalls[action]:.2f}%" for action in action_keys
         )
+        macro_value = f"{100 * evaluation['macro_f1']:.2f}% | " if has_f1 else ""
         lines.append(
             f"| {DISPLAY_NAMES.get(algorithm, algorithm)} "
             f"| {100 * evaluation['accuracy']:.2f}% "
-            f"| {recall_values} |"
+            f"| {macro_value}{recall_values} |"
         )
+    if has_f1:
+        lines.extend(
+            [
+                "",
+                "## Per-action precision and F1",
+                "",
+                "Undefined precision or recall is set to zero. Macro F1 averages "
+                "actions with at least one true evaluation row.",
+                "",
+                "| Algorithm | Action | True rows | Predicted rows | Precision | F1 |",
+                "|---|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for algorithm in algorithms:
+            evaluation = metrics["algorithms"][algorithm]["evaluation"]
+            for action in action_keys:
+                lines.append(
+                    f"| {DISPLAY_NAMES.get(algorithm, algorithm)} | {action} "
+                    f"| {evaluation['per_action_support'][action]} "
+                    f"| {evaluation['per_action_prediction_count'][action]} "
+                    f"| {100 * evaluation['per_action_precision'][action]:.2f}% "
+                    f"| {100 * evaluation['per_action_f1'][action]:.2f}% |"
+                )
     if all(
         "overlap_slices" in metrics["algorithms"][algorithm]["evaluation"]
         for algorithm in algorithms

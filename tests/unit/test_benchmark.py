@@ -93,6 +93,29 @@ def test_single_algorithm_and_legacy_reports(tmp_path):
     del aggregate["paired_comparisons"]
     generate_benchmark_report(tmp_path, aggregate)
     assert "Paired seed comparisons" not in (tmp_path / "benchmark.md").read_text()
+    assert "Macro F1 mean" not in (tmp_path / "benchmark.md").read_text()
+
+
+def test_macro_f1_is_aggregated_and_invalid_values_are_rejected(tmp_path):
+    paths = _runs(tmp_path, {"dqn": [0.5, 0.75]}, [1, 2])
+    for path, score in zip(paths, [0.25, 0.75], strict=True):
+        metrics_path = path / "metrics.json"
+        metrics = json.loads(metrics_path.read_text())
+        metrics["algorithms"]["dqn"]["evaluation"]["macro_f1"] = score
+        metrics_path.write_text(json.dumps(metrics))
+    aggregate = aggregate_runs(paths, [1, 2])
+    assert aggregate["algorithms"]["dqn"]["macro_f1"]["mean"] == 0.5
+    assert aggregate["algorithms"]["dqn"]["macro_f1"]["std"] == pytest.approx(
+        0.5 / 2**0.5
+    )
+    generate_benchmark_report(tmp_path, aggregate)
+    assert "Macro F1 mean | Macro F1 std" in (tmp_path / "benchmark.md").read_text()
+    second_path = paths[1] / "metrics.json"
+    metrics = json.loads(second_path.read_text())
+    metrics["algorithms"]["dqn"]["evaluation"]["macro_f1"] = 1.5
+    second_path.write_text(json.dumps(metrics))
+    with pytest.raises(ValueError, match="macro F1"):
+        aggregate_runs(paths, [1, 2])
 
 
 def test_aggregate_overlap_slices_and_report_nonempty_groups(tmp_path):

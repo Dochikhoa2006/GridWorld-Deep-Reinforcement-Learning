@@ -63,7 +63,7 @@ def classification_metrics(
     *,
     num_actions: int = 4,
 ) -> dict[str, Any]:
-    """Compute evaluation-split agreement, confusion, support, and action recall."""
+    """Compute agreement and class metrics from the evaluation confusion matrix."""
 
     if (
         isinstance(num_actions, bool)
@@ -95,21 +95,44 @@ def classification_metrics(
     confusion = np.zeros((num_actions, num_actions), dtype=np.int64)
     np.add.at(confusion, (actual, predicted), 1)
     support = confusion.sum(axis=1)
+    prediction_count = confusion.sum(axis=0)
     recall = np.divide(
         np.diag(confusion),
         support,
         out=np.zeros(num_actions, dtype=np.float64),
         where=support != 0,
     )
+    precision = np.divide(
+        np.diag(confusion),
+        prediction_count,
+        out=np.zeros(num_actions, dtype=np.float64),
+        where=prediction_count != 0,
+    )
+    f1 = np.divide(
+        2 * precision * recall,
+        precision + recall,
+        out=np.zeros(num_actions, dtype=np.float64),
+        where=(precision + recall) != 0,
+    )
     return {
         "accuracy": float((actual == predicted).mean()),
+        "macro_f1": float(f1[support > 0].mean()),
         "num_examples": len(actual),
         "confusion_matrix": confusion.tolist(),
         "per_action_recall": {
             str(action): float(recall[action]) for action in range(num_actions)
         },
+        "per_action_precision": {
+            str(action): float(precision[action]) for action in range(num_actions)
+        },
+        "per_action_f1": {
+            str(action): float(f1[action]) for action in range(num_actions)
+        },
         "per_action_support": {
             str(action): int(support[action]) for action in range(num_actions)
+        },
+        "per_action_prediction_count": {
+            str(action): int(prediction_count[action]) for action in range(num_actions)
         },
     }
 

@@ -111,6 +111,9 @@ def test_end_to_end_run_writes_loadable_reproducible_artifacts(tmp_path) -> None
     assert slices["exact_training_transition"]["rows"] == 4
     assert slices["seen_state_new_transition"] == {"rows": 0, "accuracy": None}
     assert slices["unseen_state"] == {"rows": 0, "accuracy": None}
+    evaluation = metrics["algorithms"]["dqn"]["evaluation"]
+    assert 0 <= evaluation["macro_f1"] <= 1
+    assert set(evaluation["per_action_precision"]) == {"0", "1", "2", "3"}
     assert metrics["algorithms"]["dqn"]["target_synchronizations"] == 5
     assert {
         "python",
@@ -123,7 +126,8 @@ def test_end_to_end_run_writes_loadable_reproducible_artifacts(tmp_path) -> None
     assert {"git_commit", "git_dirty"} == set(metrics["source"])
     assert "state_action_coverage" in metrics["dataset"]["diagnostics"]
     summary = (run_dir / "summary.md").read_text()
-    assert "| Algorithm | Agreement | Recall a0" in summary
+    assert "| Algorithm | Agreement | Macro F1 | Recall a0" in summary
+    assert "Per-action precision and F1" in summary
     assert "Agreement by training overlap" in summary
     assert "| DQN | Unseen state | 0 | N/A |" in summary
     assert "| DQN |" in summary and "%" in summary.split("| DQN |", maxsplit=1)[1]
@@ -245,6 +249,7 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
     aggregate = json.loads((benchmark_dir / "aggregate_metrics.json").read_text())
     assert aggregate["seeds"] == [3, 5]
     assert aggregate["num_runs"] == 2
+    assert "macro_f1" in aggregate["algorithms"]["dqn"]
     assert aggregate["algorithms"]["dqn"]["overlap_slices"]["unseen_state"] == {
         "rows": 0,
         "accuracy": None,
@@ -264,6 +269,7 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
     ] == ["runs/seed-3", "runs/seed-5"]
     benchmark_summary = (benchmark_dir / "benchmark.md").read_text()
     assert "| Algorithm | Agreement mean | Agreement std" in benchmark_summary
+    assert "Macro F1 mean | Macro F1 std" in benchmark_summary
     assert "| DQN | Unseen state | 0 | N/A | N/A |" in benchmark_summary
     assert "| DQN |" in benchmark_summary
     assert "%" in benchmark_summary.split("| DQN |", maxsplit=1)[1]

@@ -204,6 +204,13 @@ once. Empty groups report `N/A`; they do not imply zero accuracy. Benchmark tabl
 show the mean and sample standard deviation across seeds for each nonempty group.
 These figures describe agreement on the provided split, not environment return.
 
+Run metrics also include per-action precision and F1, predicted-action counts,
+and macro F1. The experiment summary lists precision and F1 next to each action's
+support and prediction count. Macro F1 averages the F1 values of actions with
+at least one true evaluation row; actions with no true rows are excluded. An
+undefined precision or recall is recorded as zero. Benchmark summaries include
+the mean and sample standard deviation of macro F1 across seeds.
+
 Benchmarks also compare every algorithm pair on matching seeds. The aggregate
 JSON's `paired_comparisons` contains each seed's agreement difference, its mean,
 sample standard deviation, minimum and maximum, and seed-level win/tie/loss counts.

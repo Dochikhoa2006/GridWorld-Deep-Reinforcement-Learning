@@ -139,6 +139,17 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
             raise ValueError(
                 f"Benchmark runs have inconsistent recall actions for {algorithm}."
             )
+        f1_values = [evaluation.get("macro_f1") for evaluation in evaluations]
+        if any(value is not None for value in f1_values) and any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or not 0 <= value <= 1
+            for value in f1_values
+        ):
+            raise ValueError(
+                f"Benchmark macro F1 is invalid or missing for {algorithm}."
+            )
         sliced = [evaluation.get("overlap_slices") for evaluation in evaluations]
         if any(value is not None for value in sliced):
             if any(
@@ -195,6 +206,8 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
                 for run in metrics
             ),
         }
+        if f1_values[0] is not None:
+            algorithms[algorithm]["macro_f1"] = _summary(f1_values)
         if sliced[0] is not None:
             algorithms[algorithm]["overlap_slices"] = {
                 name: {
@@ -324,6 +337,11 @@ def generate_benchmark_report(
     figure.savefig(figure_path, dpi=160, bbox_inches="tight")
     plt.close(figure)
 
+    has_f1 = all(
+        "macro_f1" in aggregate["algorithms"][name] for name in algorithm_names
+    )
+    f1_header = " | Macro F1 mean | Macro F1 std" if has_f1 else ""
+    f1_separator = "|---:|---:" if has_f1 else ""
     lines = [
         "# Multi-seed benchmark summary",
         "",
@@ -337,16 +355,22 @@ def generate_benchmark_report(
         f"- Training state-mode reference: `{training_mode_reference:.2f}%`",
         f"- Evaluation state-mode ceiling: `{evaluation_ceiling:.2f}%`",
         "",
-        "| Algorithm | Agreement mean | Agreement std | Minimum | Maximum |",
-        "|---|---:|---:|---:|---:|",
+        f"| Algorithm | Agreement mean | Agreement std | Minimum | Maximum{f1_header} |",
+        f"|---|---:|---:|---:|---:{f1_separator}|",
     ]
     for algorithm in algorithm_names:
         accuracy = aggregate["algorithms"][algorithm]["accuracy"]
+        f1 = aggregate["algorithms"][algorithm].get("macro_f1")
+        f1_values = (
+            f" | {100 * f1['mean']:.2f}% | {100 * f1['std']:.2f}%"
+            if f1 is not None
+            else ""
+        )
         lines.append(
             f"| {DISPLAY_NAMES.get(algorithm, algorithm)} "
             f"| {100 * accuracy['mean']:.2f}% | {100 * accuracy['std']:.2f}% "
             f"| {100 * accuracy['minimum']:.2f}% "
-            f"| {100 * accuracy['maximum']:.2f}% |"
+            f"| {100 * accuracy['maximum']:.2f}%{f1_values} |"
         )
     if all(
         "overlap_slices" in aggregate["algorithms"][name] for name in algorithm_names
