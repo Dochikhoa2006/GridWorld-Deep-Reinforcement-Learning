@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import importlib.metadata
 import json
+import math
 import platform
 import shutil
 import uuid
@@ -48,6 +49,15 @@ def _mean_history(
         / sum(size for size, _batch in batch_metrics)
         for key in ("td_loss", "cql_loss", "total_loss")
     }
+
+
+def _require_finite(tensors: dict[str, torch.Tensor], context: str) -> None:
+    """Reject invalid tensors with one device synchronization on the normal path."""
+
+    checks = {name: torch.isfinite(value).all() for name, value in tensors.items()}
+    if not torch.stack(list(checks.values())).all():
+        names = ", ".join(name for name, finite in checks.items() if not finite)
+        raise RuntimeError(f"Non-finite {names} during {context}.")
 
 
 def train_model(
@@ -99,6 +109,10 @@ def train_model(
         epoch_metrics: list[tuple[int, dict[str, float]]] = []
         optimizer.zero_grad(set_to_none=True)
         for batch_index, batch in enumerate(loader):
+            context = (
+                f"{algorithm} training (epoch {_epoch + 1}, batch {batch_index + 1}, "
+                f"optimizer update {global_step + 1})"
+            )
             states = batch["state"].to(device)
             actions = batch["action"].to(device)
             rewards = batch["reward"].to(device)
@@ -109,6 +123,14 @@ def train_model(
             with torch.no_grad():
                 next_online_q = model(next_states)
                 next_target_q = target_model(next_states)
+            _require_finite(
+                {
+                    "online Q-values": online_q,
+                    "next online Q-values": next_online_q,
+                    "target Q-values": next_target_q,
+                },
+                context,
+            )
             loss, parts = calculate_loss(
                 algorithm,
                 online_q,
@@ -121,6 +143,9 @@ def train_model(
                 config.training.epsilon,
                 config.training.cql_alpha,
             )
+            _require_finite({"loss": loss}, context)
+            if any(not math.isfinite(value) for value in parts.values()):
+                raise RuntimeError(f"Non-finite loss metrics during {context}.")
 
             # Weight by transitions, including a short final minibatch/window.
             # Each window has the same objective as its concatenated full batch.
@@ -133,15 +158,23 @@ def train_model(
             if (batch_index + 1) % accumulation_steps == 0 or batch_index + 1 == len(
                 loader
             ):
-                nn.utils.clip_grad_norm_(
-                    model.parameters(), config.training.gradient_clip_norm
-                )
+                try:
+                    nn.utils.clip_grad_norm_(
+                        model.parameters(),
+                        config.training.gradient_clip_norm,
+                        error_if_nonfinite=True,
+                    )
+                except RuntimeError as exc:
+                    raise RuntimeError(
+                        f"Gradient clipping failed during {context}: {exc}"
+                    ) from exc
                 learning_rate = learning_rate_for_step(
                     config.training, global_step, total_steps
                 )
                 for group in optimizer.param_groups:
                     group["lr"] = learning_rate
                 optimizer.step()
+                _require_finite(dict(model.named_parameters()), context)
                 optimizer.zero_grad(set_to_none=True)
                 global_step += 1
                 if global_step % config.training.target_update_interval == 0:
@@ -164,7 +197,8 @@ def train_model(
 
 def _write_json(path: Path, value: Any) -> None:
     path.write_text(
-        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
     )
 
 

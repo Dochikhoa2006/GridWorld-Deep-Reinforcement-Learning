@@ -40,7 +40,13 @@ def predict_actions(
         with torch.no_grad():
             for start in range(0, len(state_tensor), batch_size):
                 batch = state_tensor[start : start + batch_size].to(device)
-                predictions.append(model(batch).argmax(dim=1).cpu())
+                q_values = model(batch)
+                if not torch.isfinite(q_values).all():
+                    raise ValueError(
+                        f"Non-finite Q-values during prediction at rows "
+                        f"{start}..{start + len(batch) - 1}."
+                    )
+                predictions.append(q_values.argmax(dim=1).cpu())
     finally:
         model.train(was_training)
     if not predictions:

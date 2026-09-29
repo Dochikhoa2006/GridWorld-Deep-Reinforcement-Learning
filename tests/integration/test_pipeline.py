@@ -181,6 +181,53 @@ def test_cli_reports_missing_dataset_without_traceback(tmp_path, capsys) -> None
     assert "Dataset file not found" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("existing_run", [False, True])
+def test_divergence_preserves_published_artifacts(
+    tmp_path, monkeypatch, capsys, existing_run
+):
+    import gridworld_rl.trainer as trainer
+
+    config = _config(tmp_path, "protected")
+    run_dir = Path(config.output.directory) / config.output.run_name
+    before = {}
+    if existing_run:
+        run_experiment(config)
+        before = {
+            p.relative_to(run_dir): p.read_bytes()
+            for p in run_dir.rglob("*")
+            if p.is_file()
+        }
+        config.output.overwrite = True
+    original_loss = trainer.calculate_loss
+    calls = 0
+
+    def diverging_loss(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        loss, parts = original_loss(*args, **kwargs)
+        return (loss * float("nan") if calls == 2 else loss), parts
+
+    monkeypatch.setattr(trainer, "calculate_loss", diverging_loss)
+    config_path = tmp_path / "failure.json"
+    config.to_json(config_path)
+    with pytest.raises(SystemExit) as exc:
+        main(["train", "--config", str(config_path)])
+    assert exc.value.code == 2
+    error = capsys.readouterr().err
+    assert "Non-finite loss" in error and "batch 2" in error
+    assert "Traceback" not in error
+    if existing_run:
+        assert before == {
+            p.relative_to(run_dir): p.read_bytes()
+            for p in run_dir.rglob("*")
+            if p.is_file()
+        }
+        assert verify_artifacts(run_dir).valid
+    else:
+        assert not run_dir.exists()
+    assert not list(run_dir.parent.glob(".protected.in-progress-*"))
+
+
 def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) -> None:
     benchmark_dir = run_benchmark(
         _config(tmp_path, "unused"),

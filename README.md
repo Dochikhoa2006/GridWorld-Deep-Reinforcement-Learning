@@ -332,6 +332,13 @@ The constant schedule optionally warms up, then holds the base rate; its floor
 ratio has no effect. `training_history.learning_rate` records the last rate used
 in each epoch. Defaults preserve constant-rate training.
 
+Training rejects non-finite Q-values, losses, accumulated gradient norms, and
+updated model parameters. Errors identify the algorithm, epoch, minibatch, and
+optimizer update. A failed experiment removes its staging directory and preserves
+any previously published run, including when `--overwrite` was requested.
+Prediction also rejects non-finite Q-values instead of selecting an arbitrary
+action, and experiment metrics cannot serialize NaN or infinity.
+
 ## Artifact contract
 
 A single run is self-describing at the experiment level:
