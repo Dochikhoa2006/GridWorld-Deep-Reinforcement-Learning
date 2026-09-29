@@ -309,7 +309,8 @@ specification. Major controls include:
 | `training.gamma`                  | Bellman discount factor                                     |
 | `training.epsilon`                | Expected SARSA epsilon-greedy probability                   |
 | `training.cql_alpha`              | Conservative penalty weight                                 |
-| `training.target_update_interval` | Optimizer steps between target-network copies               |
+| `training.target_update_interval` | Optimizer steps between target-network updates              |
+| `training.target_update_tau`      | Target blend at each update; `1` means a full copy           |
 | `training.gradient_clip_norm`     | Maximum gradient norm                                       |
 | `training.device`                 | `auto`, `cpu`, `cuda`, or `mps`                     |
 | `network.hidden_sizes`            | Q-network hidden-layer widths                               |
@@ -341,6 +342,14 @@ advance only when the optimizer steps, including partial accumulation windows.
 The constant schedule optionally warms up, then holds the base rate; its floor
 ratio has no effect. `training_history.learning_rate` records the last rate used
 in each epoch. Defaults preserve constant-rate training.
+
+Target-network updates can also blend weights gradually with
+`--target-update-tau 0.05` (available for `train` and `benchmark`). At each
+`target_update_interval` optimizer updates, the target becomes
+`(1 - tau) * target + tau * online`. The default `tau = 1` retains full copies;
+`0 < tau < 1` uses smoothing. The target starts as an exact copy of the online
+network, and `target_synchronizations` counts that initial copy plus scheduled
+updates. The setting is saved with the run configuration.
 
 Training rejects non-finite Q-values, losses, accumulated gradient norms, and
 updated model parameters. Errors identify the algorithm, epoch, minibatch, and

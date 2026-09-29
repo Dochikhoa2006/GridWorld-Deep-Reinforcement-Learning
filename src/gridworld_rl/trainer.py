@@ -64,6 +64,34 @@ def _require_finite(tensors: dict[str, torch.Tensor], context: str) -> None:
         raise RuntimeError(f"Non-finite {names} during {context}.")
 
 
+@torch.no_grad()
+def update_target_model(target: nn.Module, online: nn.Module, tau: float) -> None:
+    """Apply a full copy or blend to target parameters.
+
+    Non-parameter buffers are copied at each update, since QNetwork currently
+    has none and integer buffers cannot be blended.
+    """
+
+    if (
+        isinstance(tau, bool)
+        or not isinstance(tau, (int, float))
+        or not math.isfinite(tau)
+        or not 0 < tau <= 1
+    ):
+        raise ValueError("tau must be greater than 0 and at most 1.")
+    if tau == 1:
+        target.load_state_dict(online.state_dict())
+        return
+    for target_parameter, online_parameter in zip(
+        target.parameters(), online.parameters(), strict=True
+    ):
+        target_parameter.lerp_(online_parameter, tau)
+    for target_buffer, online_buffer in zip(
+        target.buffers(), online.buffers(), strict=True
+    ):
+        target_buffer.copy_(online_buffer)
+
+
 def train_model(
     algorithm: str,
     dataset: TransitionDataset,
@@ -182,7 +210,9 @@ def train_model(
                 optimizer.zero_grad(set_to_none=True)
                 global_step += 1
                 if global_step % config.training.target_update_interval == 0:
-                    target_model.load_state_dict(model.state_dict())
+                    update_target_model(
+                        target_model, model, config.training.target_update_tau
+                    )
                     target_syncs += 1
             epoch_metrics.append((len(states), parts))
 

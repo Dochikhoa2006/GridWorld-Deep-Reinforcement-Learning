@@ -134,6 +134,11 @@ def _add_training_override_arguments(
     if include_seed:
         parser.add_argument("--seed", type=int, help="override training.seed")
     parser.add_argument("--cql-alpha", type=float, help="override training.cql_alpha")
+    parser.add_argument(
+        "--target-update-tau",
+        type=float,
+        help="target-network blend at each update (default: 1, full copy)",
+    )
 
 
 def _load_config(path: str | None, data_dir: str | None = None) -> ExperimentConfig:
@@ -163,6 +168,7 @@ def _apply_training_overrides(
         "device",
         "seed",
         "cql_alpha",
+        "target_update_tau",
     ):
         value = getattr(args, name, None)
         if value is not None:

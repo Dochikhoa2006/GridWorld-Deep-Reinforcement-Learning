@@ -38,6 +38,7 @@
     "num_workers": 0,
     "seed": 42,
     "target_update_interval": 250,
+    "target_update_tau": 1.0,
     "warmup_steps": 0
   }
 }

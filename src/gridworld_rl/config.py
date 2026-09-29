@@ -39,6 +39,7 @@ class TrainingConfig:
     epsilon: float = 0.1
     cql_alpha: float = 1.0
     target_update_interval: int = 250
+    target_update_tau: float = 1.0
     gradient_clip_norm: float = 10.0
     seed: int = 42
     device: str = "auto"
@@ -185,6 +186,15 @@ class ExperimentConfig:
             or t.learning_rate <= 0
         ):
             raise ValueError("training.learning_rate must be positive and finite.")
+        if (
+            isinstance(t.target_update_tau, bool)
+            or not isinstance(t.target_update_tau, (int, float))
+            or not math.isfinite(t.target_update_tau)
+            or not 0 < t.target_update_tau <= 1
+        ):
+            raise ValueError(
+                "training.target_update_tau must be greater than 0 and at most 1."
+            )
         if (
             isinstance(t.gamma, bool)
             or not isinstance(t.gamma, (int, float))
