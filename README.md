@@ -421,8 +421,10 @@ the checkpoint's configured state range. Predictions use the lowest action index
 when Q-values tie. The output is written as a new file; an existing destination
 is never replaced. Input rows are validated and processed in batches, so the
 entire CSV need not be held in memory. `--batch-size` and `--device` control
-inference. Q-values are model estimates, not probabilities. Keep this CSV outside retained run and
-benchmark directories so their integrity manifests remain valid.
+inference. Q-values are model estimates, not probabilities. Keep this CSV
+outside retained run and benchmark directories so their integrity manifests
+remain valid.
+
 `manifest.json` records SHA-256 hashes for the other run files. Reports are derived
 from saved metrics and can be regenerated without retraining:
 
@@ -436,6 +438,10 @@ Verify a saved experiment or an entire multi-seed benchmark without changing fil
 gridworld-rl verify --run-dir artifacts/smoke-seed-42
 gridworld-rl verify --run-dir artifacts/benchmarks/five-seed-study
 ```
+
+For CI, add `--json` to print one JSON object with `valid`, `checked_files`,
+and sorted `missing`, `modified`, and `unexpected` file lists. Exit codes remain
+`0` for intact artifacts, `1` for mismatches, and `2` for invalid manifests.
 
 Verification checks every SHA-256 entry, including nested run manifests in a
 benchmark, and reports all missing, modified, and unexpected files. Exit status

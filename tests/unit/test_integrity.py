@@ -51,6 +51,27 @@ def test_all_integrity_failures_are_reported(tmp_path, capsys):
     ]
 
 
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_json_verification_is_machine_readable(tmp_path, capsys, corrupt):
+    root = _artifact_directory(tmp_path)
+    if corrupt:
+        (root / "metrics.json").write_text("changed")
+        (root / "extra.txt").write_text("extra")
+    status = main(["verify", "--run-dir", str(root), "--json"])
+    output = capsys.readouterr()
+    assert output.err == ""
+    payload = json.loads(output.out)
+    assert payload == {
+        "schema_version": 1,
+        "valid": not corrupt,
+        "checked_files": 2,
+        "missing": [],
+        "modified": ["metrics.json"] if corrupt else [],
+        "unexpected": ["extra.txt"] if corrupt else [],
+    }
+    assert status == (1 if corrupt else 0)
+
+
 @pytest.mark.parametrize(
     "name",
     [

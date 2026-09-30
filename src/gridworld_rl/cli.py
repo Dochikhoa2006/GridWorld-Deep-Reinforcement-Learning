@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Sequence
+from dataclasses import asdict
 from pathlib import Path
 
 from . import __version__
@@ -78,6 +80,9 @@ def build_parser() -> argparse.ArgumentParser:
         "verify", help="verify saved experiment or benchmark artifact integrity"
     )
     verify.add_argument("--run-dir", required=True, help="artifact directory to verify")
+    verify.add_argument(
+        "--json", action="store_true", help="print one JSON result to stdout"
+    )
     export = subparsers.add_parser(
         "export-policy", help="export Q-values and greedy actions for every state"
     )
@@ -300,6 +305,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             from .integrity import verify_artifacts
 
             result = verify_artifacts(args.run_dir)
+            if args.json:
+                print(
+                    json.dumps(
+                        {"schema_version": 1, "valid": result.valid, **asdict(result)},
+                        sort_keys=True,
+                    )
+                )
+                return 0 if result.valid else 1
             if not result.valid:
                 for category in ("missing", "modified", "unexpected"):
                     for name in getattr(result, category):
