@@ -371,7 +371,8 @@ without allocating a dense one-hot batch. Vector state inputs and saved
 checkpoint parameter names remain compatible.
 DQN and CQL also skip the online next-state forward pass because their Bellman
 targets use only the target network. Double DQN and Expected SARSA retain both
-next-state evaluations.
+next-state evaluations. All four algorithms skip next-state inference for
+terminal transitions, whose Bellman targets equal the observed reward.
 
 ## Artifact contract
 

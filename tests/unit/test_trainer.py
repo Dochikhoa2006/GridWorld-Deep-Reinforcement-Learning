@@ -124,3 +124,46 @@ def test_next_online_network_runs_only_when_target_requires_it(
     _, metrics = train_model(algorithm, dataset, config, torch.device("cpu"))
     assert metrics["global_steps"] == 2
     assert calls == expected_forwards
+
+
+@pytest.mark.parametrize("algorithm", SUPPORTED_ALGORITHMS)
+@pytest.mark.parametrize("terminal_rows", [2, 4])
+def test_terminal_transitions_skip_next_state_inference(
+    monkeypatch, algorithm, terminal_rows
+):
+    dataset = TransitionDataset(
+        pd.DataFrame(
+            {
+                "state": [0, 1, 2, 3],
+                "action": [0, 1, 2, 3],
+                "reward": [0.1, 0.2, 0.3, 0.4],
+                "next_state": [4, 5, 6, 7],
+                "done": [i < terminal_rows for i in range(4)],
+            }
+        )
+    )
+    config = ExperimentConfig.from_dict(
+        {
+            "network": {"hidden_sizes": [8]},
+            "training": {"algorithms": [algorithm], "epochs": 1, "batch_size": 4},
+        }
+    )
+    original_forward = QNetwork.forward
+    batches = []
+
+    def recording_forward(model, states):
+        batches.append(states.tolist())
+        return original_forward(model, states)
+
+    monkeypatch.setattr(QNetwork, "forward", recording_forward)
+    _, metrics = train_model(algorithm, dataset, config, torch.device("cpu"))
+    assert metrics["global_steps"] == 1
+    assert sorted(batches[0]) == [0, 1, 2, 3]
+    expected_next = [i for i in range(4 + terminal_rows, 8)]
+    if terminal_rows == 4:
+        assert len(batches) == 1
+    else:
+        assert len(batches) == (
+            3 if algorithm in {"double_dqn", "expected_sarsa"} else 2
+        )
+        assert all(sorted(batch) == expected_next for batch in batches[1:])

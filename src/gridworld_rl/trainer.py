@@ -153,12 +153,20 @@ def train_model(
 
             online_q = model(states)
             with torch.no_grad():
-                next_target_q = target_model(next_states)
-                next_online_q = (
-                    model(next_states)
-                    if algorithm in {"double_dqn", "expected_sarsa"}
-                    else next_target_q
-                )
+                # Terminal targets are exactly the observed reward. Filling
+                # their bootstrap values with zero avoids needless inference.
+                nonterminal = dones == 0
+                has_nonterminal = bool(nonterminal.any())
+                next_target_q = online_q.new_zeros(online_q.shape)
+                if has_nonterminal:
+                    active_next_states = next_states[nonterminal]
+                    next_target_q[nonterminal] = target_model(active_next_states)
+                if algorithm in {"double_dqn", "expected_sarsa"}:
+                    next_online_q = online_q.new_zeros(online_q.shape)
+                    if has_nonterminal:
+                        next_online_q[nonterminal] = model(active_next_states)
+                else:
+                    next_online_q = next_target_q
             _require_finite(
                 {
                     "online Q-values": online_q,
