@@ -40,8 +40,13 @@ class QNetwork(nn.Module):
             torch.int64,
             torch.uint8,
         ):
-            states = F.one_hot(states.long(), num_classes=self.num_states).float()
-        elif states.shape[-1] != self.num_states:
+            # The first linear layer on one-hot(state) selects one weight column
+            # and adds its bias. Gather that column directly to avoid allocating
+            # a dense [batch, num_states] one-hot tensor.
+            first_layer = self.network[0]
+            hidden = F.embedding(states.long(), first_layer.weight.T)
+            return self.network[1:](hidden + first_layer.bias)
+        if states.shape[-1] != self.num_states:
             raise ValueError(
                 f"Expected integer states or vectors of size {self.num_states}; "
                 f"received shape {tuple(states.shape)}."

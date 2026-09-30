@@ -365,6 +365,11 @@ any previously published run, including when `--overwrite` was requested.
 Prediction also rejects non-finite Q-values instead of selecting an arbitrary
 action, and experiment metrics cannot serialize NaN or infinity.
 
+The Q-network handles integer states by gathering the first layer's weight
+column directly. This produces the same values and gradients as a one-hot input
+without allocating a dense one-hot batch. Vector state inputs and saved
+checkpoint parameter names remain compatible.
+
 ## Artifact contract
 
 A single run is self-describing at the experiment level:
