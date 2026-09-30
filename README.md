@@ -413,8 +413,9 @@ The output keeps input row order and duplicates, with `state`, greedy `action`,
 `action_gap`, and one `q_<action>` column per action. State IDs must fall within
 the checkpoint's configured state range. Predictions use the lowest action index
 when Q-values tie. The output is written as a new file; an existing destination
-is never replaced. `--batch-size` and `--device` control inference. Q-values are
-model estimates, not probabilities. Keep this CSV outside retained run and
+is never replaced. Input rows are validated and processed in batches, so the
+entire CSV need not be held in memory. `--batch-size` and `--device` control
+inference. Q-values are model estimates, not probabilities. Keep this CSV outside retained run and
 benchmark directories so their integrity manifests remain valid.
 `manifest.json` records SHA-256 hashes for the other run files. Reports are derived
 from saved metrics and can be regenerated without retraining:

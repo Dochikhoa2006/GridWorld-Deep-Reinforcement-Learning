@@ -183,3 +183,34 @@ def test_accepts_integer_valued_numeric_state(tmp_path):
     output = tmp_path / "predictions.csv"
     predict_csv(checkpoint, source, output)
     assert pd.read_csv(output)["state"].tolist() == [1]
+
+
+def test_streams_many_rows_in_bounded_batches(tmp_path, monkeypatch):
+    checkpoint = _checkpoint(tmp_path)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n" + "".join(f"{index % 5}\n" for index in range(257)))
+    original_forward = QNetwork.forward
+    lengths = []
+
+    def recording_forward(model, states):
+        lengths.append(len(states))
+        return original_forward(model, states)
+
+    monkeypatch.setattr(QNetwork, "forward", recording_forward)
+    output = tmp_path / "predictions.csv"
+    predict_csv(checkpoint, source, output, batch_size=16)
+    assert lengths == [16] * 16 + [1]
+    assert len(pd.read_csv(output)) == 257
+
+
+def test_late_invalid_row_does_not_publish_partial_predictions(tmp_path):
+    checkpoint = _checkpoint(tmp_path)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n" + "0\n" * 32 + "bad\n")
+    output = tmp_path / "predictions.csv"
+    with pytest.raises(ValueError, match="row 32"):
+        predict_csv(checkpoint, source, output, batch_size=8)
+    assert sorted(path.name for path in tmp_path.iterdir()) == [
+        "model.pt",
+        "states.csv",
+    ]

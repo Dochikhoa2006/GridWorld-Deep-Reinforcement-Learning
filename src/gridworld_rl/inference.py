@@ -3,16 +3,41 @@
 from __future__ import annotations
 
 import csv
+import math
 import os
 import tempfile
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
 import torch
 
 from .checkpoints import load_checkpoint
 from .reproducibility import resolve_device, sha256_file
+
+
+def _write_batch(
+    writer,
+    model: torch.nn.Module,
+    states: list[int],
+    *,
+    start: int,
+    device: torch.device,
+) -> None:
+    batch = torch.tensor(states, dtype=torch.long, device=device)
+    with torch.inference_mode():
+        q_values = model(batch)
+        if not torch.isfinite(q_values).all():
+            raise ValueError(
+                f"Checkpoint produces non-finite Q-values at input rows "
+                f"{start}..{start + len(batch) - 1}."
+            )
+        values = q_values.cpu().tolist()
+        best = q_values.topk(2, dim=1).values.cpu().double()
+        gaps = (best[:, 0] - best[:, 1]).tolist()
+        actions = q_values.argmax(dim=1).cpu().tolist()
+    for state, action, gap, values_row in zip(
+        states, actions, gaps, values, strict=True
+    ):
+        writer.writerow([state, action, gap, *values_row])
 
 
 def predict_csv(
@@ -37,82 +62,86 @@ def predict_csv(
     source = Path(input_csv)
     if not source.is_file():
         raise FileNotFoundError(f"State CSV not found: {source}")
-    try:
-        frame = pd.read_csv(source, dtype=str, keep_default_na=False)
-    except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeError) as exc:
-        raise ValueError(f"Invalid state CSV {source}: {exc}") from exc
-    if frame.columns.tolist() != ["state"]:
-        raise ValueError("State CSV must contain exactly one column named 'state'.")
-    if frame.empty:
-        raise ValueError("State CSV must contain at least one row.")
-    numeric = pd.to_numeric(frame["state"], errors="coerce").to_numpy(dtype=np.float64)
-    invalid = ~np.isfinite(numeric) | (numeric != np.floor(numeric))
-    if invalid.any():
-        rows = np.flatnonzero(invalid)[:5].tolist()
-        raise ValueError(
-            f"State CSV has non-integer or non-finite states at rows {rows}."
-        )
-
     selected_device = resolve_device(device)
     fingerprint = sha256_file(checkpoint)
     model, _metadata = load_checkpoint(checkpoint)
-    out_of_range = (numeric < 0) | (numeric >= model.num_states)
-    if out_of_range.any():
-        rows = np.flatnonzero(out_of_range)[:5].tolist()
-        raise ValueError(
-            f"State CSV states must be in 0..{model.num_states - 1}; "
-            f"out-of-range rows: {rows}."
-        )
-    states = numeric.astype(np.int64)
     model.to(selected_device)
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = None
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            newline="",
-            dir=destination.parent,
-            prefix=f".{destination.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as temporary:
+        with (
+            source.open(encoding="utf-8", newline="") as input_file,
+            tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="",
+                dir=destination.parent,
+                prefix=f".{destination.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as temporary,
+        ):
             temporary_path = Path(temporary.name)
             writer = csv.writer(temporary)
             writer.writerow(
                 ["state", "action", "action_gap"]
                 + [f"q_{action}" for action in range(model.num_actions)]
             )
-            with torch.inference_mode():
-                for start in range(0, len(states), batch_size):
-                    batch = torch.tensor(
-                        states[start : start + batch_size],
-                        dtype=torch.long,
+            reader = csv.reader(input_file, strict=True)
+            if next(reader, None) != ["state"]:
+                raise ValueError(
+                    "State CSV must contain exactly one column named 'state'."
+                )
+            pending: list[int] = []
+            row_count = 0
+            for row in reader:
+                if len(row) != 1:
+                    raise ValueError(
+                        f"State CSV row {row_count} must contain one state."
+                    )
+                try:
+                    value = float(row[0])
+                except ValueError as exc:
+                    raise ValueError(
+                        f"State CSV has a non-integer or non-finite state at row {row_count}."
+                    ) from exc
+                if not math.isfinite(value) or not value.is_integer():
+                    raise ValueError(
+                        f"State CSV has a non-integer or non-finite state at row {row_count}."
+                    )
+                if not 0 <= value < model.num_states:
+                    raise ValueError(
+                        f"State CSV states must be in 0..{model.num_states - 1}; "
+                        f"out-of-range row: {row_count}."
+                    )
+                pending.append(int(value))
+                row_count += 1
+                if len(pending) == batch_size:
+                    _write_batch(
+                        writer,
+                        model,
+                        pending,
+                        start=row_count - len(pending),
                         device=selected_device,
                     )
-                    q_values = model(batch)
-                    if not torch.isfinite(q_values).all():
-                        raise ValueError(
-                            f"Checkpoint produces non-finite Q-values at input rows "
-                            f"{start}..{start + len(batch) - 1}."
-                        )
-                    values = q_values.cpu().tolist()
-                    best = q_values.topk(2, dim=1).values.cpu().double()
-                    gaps = (best[:, 0] - best[:, 1]).tolist()
-                    actions = q_values.argmax(dim=1).cpu().tolist()
-                    for state, action, gap, values_row in zip(
-                        states[start : start + batch_size],
-                        actions,
-                        gaps,
-                        values,
-                        strict=True,
-                    ):
-                        writer.writerow([int(state), action, gap, *values_row])
+                    pending.clear()
+            if row_count == 0:
+                raise ValueError("State CSV must contain at least one row.")
+            if pending:
+                _write_batch(
+                    writer,
+                    model,
+                    pending,
+                    start=row_count - len(pending),
+                    device=selected_device,
+                )
         if sha256_file(checkpoint) != fingerprint:
             raise ValueError(
                 "Checkpoint changed during prediction; retry with a stable file."
             )
         os.link(temporary_path, destination)
+    except (UnicodeError, csv.Error) as exc:
+        raise ValueError(f"Invalid state CSV {source}: {exc}") from exc
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
