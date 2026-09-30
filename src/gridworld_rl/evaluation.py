@@ -28,21 +28,21 @@ def predict_actions(
     ):
         raise ValueError("batch_size must be a positive integer.")
 
-    # ``torch.tensor`` deliberately copies here: pandas can expose a read-only
-    # NumPy view, which otherwise triggers a warning even though inference does
-    # not mutate the input.
-    state_tensor = (
-        states.detach().to(dtype=torch.long)
-        if isinstance(states, torch.Tensor)
-        else torch.tensor(np.asarray(states), dtype=torch.long)
-    )
+    state_values = states if isinstance(states, torch.Tensor) else np.asarray(states)
     predictions: list[torch.Tensor] = []
     was_training = model.training
     model.eval()
     try:
         with torch.no_grad():
-            for start in range(0, len(state_tensor), batch_size):
-                batch = state_tensor[start : start + batch_size].to(device)
+            for start in range(0, len(state_values), batch_size):
+                selection = state_values[start : start + batch_size]
+                # torch.tensor copies each NumPy slice, including read-only
+                # pandas views, without copying the entire evaluation array.
+                batch = (
+                    selection.detach().to(device=device, dtype=torch.long)
+                    if isinstance(selection, torch.Tensor)
+                    else torch.tensor(selection, dtype=torch.long, device=device)
+                )
                 q_values = model(batch)
                 if not torch.isfinite(q_values).all():
                     raise ValueError(

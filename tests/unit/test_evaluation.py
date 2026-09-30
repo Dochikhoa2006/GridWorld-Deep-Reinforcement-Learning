@@ -76,6 +76,41 @@ class RecordingModel(nn.Module):
         return torch.stack((states, -states), dim=1)
 
 
+def test_numpy_inference_converts_only_one_batch_at_a_time(monkeypatch):
+    states = np.arange(25, dtype=np.int64)
+    states.flags.writeable = False
+    original_tensor = torch.tensor
+    copied_lengths = []
+
+    def recording_tensor(data, *args, **kwargs):
+        copied_lengths.append(len(data))
+        return original_tensor(data, *args, **kwargs)
+
+    monkeypatch.setattr(torch, "tensor", recording_tensor)
+    result = predict_actions(
+        RecordingModel(), states, device=torch.device("cpu"), batch_size=7
+    )
+    assert copied_lengths == [7, 7, 7, 4]
+    np.testing.assert_array_equal(result, np.zeros(25, dtype=np.int64))
+
+
+def test_tensor_inference_converts_dtype_per_batch():
+    class DtypeModel(RecordingModel):
+        def forward(self, states):
+            assert states.dtype == torch.long
+            return super().forward(states)
+
+    model = DtypeModel()
+    result = predict_actions(
+        model,
+        torch.arange(9, dtype=torch.float32),
+        device=torch.device("cpu"),
+        batch_size=4,
+    )
+    assert model.batch_lengths == [4, 4, 1]
+    np.testing.assert_array_equal(result, np.zeros(9, dtype=np.int64))
+
+
 @pytest.mark.parametrize("training", [True, False])
 @pytest.mark.parametrize("tensor_input", [True, False])
 def test_predictions_preserve_mode_and_batch_order(

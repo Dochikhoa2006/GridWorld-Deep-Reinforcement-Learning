@@ -365,6 +365,8 @@ any previously published run, including when `--overwrite` was requested.
 Prediction also rejects non-finite Q-values instead of selecting an arbitrary
 action, and experiment metrics cannot serialize NaN or infinity.
 
+Evaluation converts state arrays to Torch tensors one batch at a time, so
+inference does not copy the entire evaluation split into a second state array.
 The Q-network handles integer states by gathering the first layer's weight
 column directly. This produces the same values and gradients as a one-hot input
 without allocating a dense one-hot batch. Vector state inputs and saved
