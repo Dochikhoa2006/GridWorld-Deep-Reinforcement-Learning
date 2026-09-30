@@ -351,8 +351,12 @@ def test_cli_train_report_and_benchmark_commands(tmp_path, capsys) -> None:
     config_path = tmp_path / "cli-config.json"
     config.to_json(config_path)
 
-    assert main(["train", "--config", str(config_path)]) == 0
+    assert main(["train", "--config", str(config_path), "--algorithms", "cql"]) == 0
     run_dir = Path(config.output.directory) / config.output.run_name
+    assert {path.name for path in (run_dir / "checkpoints").iterdir()} == {"cql.pt"}
+    assert json.loads((run_dir / "config.json").read_text())["training"][
+        "algorithms"
+    ] == ["cql"]
     assert main(["report", "--run-dir", str(run_dir)]) == 0
     assert (
         main(
@@ -360,6 +364,8 @@ def test_cli_train_report_and_benchmark_commands(tmp_path, capsys) -> None:
                 "benchmark",
                 "--config",
                 str(config_path),
+                "--algorithms",
+                "double_dqn",
                 "--seeds",
                 "13",
                 "17",
@@ -373,6 +379,9 @@ def test_cli_train_report_and_benchmark_commands(tmp_path, capsys) -> None:
     )
 
     output = capsys.readouterr().out
+    benchmark_dir = tmp_path / "cli-benchmarks/cli-comparison"
+    aggregate = json.loads((benchmark_dir / "aggregate_metrics.json").read_text())
+    assert list(aggregate["algorithms"]) == ["double_dqn"]
     assert "Experiment complete:" in output
     assert "Generated report files:" in output
     assert "Benchmark complete:" in output

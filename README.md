@@ -175,6 +175,10 @@ published only after the run completes. An existing name is refused by default; 
 a new name to preserve evidence, or pass `--overwrite` only when you intentionally
 want an atomic replacement.
 
+To train only selected baselines, pass `--algorithms dqn cql` to `train` or
+`benchmark`. The chosen order is saved in the run configuration; duplicate and
+unsupported names are rejected.
+
 ### 5. Run a multi-seed comparison
 
 ```bash

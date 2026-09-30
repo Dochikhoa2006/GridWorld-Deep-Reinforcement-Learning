@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from . import __version__
-from .config import ExperimentConfig
+from .config import SUPPORTED_ALGORITHMS, ExperimentConfig
 
 COMMANDS = frozenset(
     {"train", "report", "benchmark", "validate", "verify", "export-policy", "predict"}
@@ -119,6 +119,12 @@ def _add_config_argument(parser: argparse.ArgumentParser) -> None:
 def _add_training_override_arguments(
     parser: argparse.ArgumentParser, *, include_seed: bool
 ) -> None:
+    parser.add_argument(
+        "--algorithms",
+        nargs="+",
+        choices=SUPPORTED_ALGORITHMS,
+        help="algorithms to train in the given order",
+    )
     parser.add_argument("--epochs", type=int, help="override training.epochs")
     parser.add_argument(
         "--learning-rate", type=float, help="override training.learning_rate"
@@ -166,6 +172,7 @@ def _apply_training_overrides(
     config: ExperimentConfig, args: argparse.Namespace
 ) -> ExperimentConfig:
     for name in (
+        "algorithms",
         "epochs",
         "learning_rate",
         "learning_rate_schedule",

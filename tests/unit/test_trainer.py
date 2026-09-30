@@ -80,6 +80,32 @@ def test_accumulation_cli_override(command):
     assert config.to_dict()["training"]["gradient_accumulation_steps"] == 4
 
 
+@pytest.mark.parametrize("command", ["train", "benchmark"])
+def test_cli_algorithm_selection_validates_and_preserves_order(command):
+    argv = [command, "--algorithms", "cql", "dqn"]
+    if command == "benchmark":
+        argv += ["--seeds", "1", "2"]
+    config = _apply_training_overrides(
+        ExperimentConfig(), build_parser().parse_args(argv)
+    )
+    assert config.training.algorithms == ["cql", "dqn"]
+
+    duplicate = [command, "--algorithms", "dqn", "dqn"]
+    if command == "benchmark":
+        duplicate += ["--seeds", "1", "2"]
+    with pytest.raises(ValueError, match="duplicates"):
+        _apply_training_overrides(
+            ExperimentConfig(), build_parser().parse_args(duplicate)
+        )
+
+    invalid = [command, "--algorithms", "unknown"]
+    if command == "benchmark":
+        invalid += ["--seeds", "1", "2"]
+    with pytest.raises(SystemExit) as exc:
+        build_parser().parse_args(invalid)
+    assert exc.value.code == 2
+
+
 def test_epoch_metrics_weight_transitions():
     first = dict.fromkeys(("td_loss", "cql_loss", "total_loss"), 2.0)
     last = dict.fromkeys(first, 10.0)
