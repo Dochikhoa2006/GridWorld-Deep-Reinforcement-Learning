@@ -369,6 +369,9 @@ The Q-network handles integer states by gathering the first layer's weight
 column directly. This produces the same values and gradients as a one-hot input
 without allocating a dense one-hot batch. Vector state inputs and saved
 checkpoint parameter names remain compatible.
+DQN and CQL also skip the online next-state forward pass because their Bellman
+targets use only the target network. Double DQN and Expected SARSA retain both
+next-state evaluations.
 
 ## Artifact contract
 

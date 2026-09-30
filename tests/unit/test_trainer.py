@@ -10,6 +10,7 @@ import torch
 from gridworld_rl.cli import _apply_training_overrides, build_parser
 from gridworld_rl.config import SUPPORTED_ALGORITHMS, ExperimentConfig
 from gridworld_rl.data import TransitionDataset
+from gridworld_rl.models import QNetwork
 from gridworld_rl.trainer import _mean_history, train_model
 
 
@@ -85,3 +86,41 @@ def test_epoch_metrics_weight_transitions():
     assert _mean_history([(3, first), (1, last)]) == dict.fromkeys(first, 4.0)
     with pytest.raises(RuntimeError, match="no batches"):
         _mean_history([])
+
+
+@pytest.mark.parametrize(
+    "algorithm,expected_forwards",
+    [("dqn", 4), ("cql", 4), ("double_dqn", 6), ("expected_sarsa", 6)],
+)
+def test_next_online_network_runs_only_when_target_requires_it(
+    monkeypatch, algorithm, expected_forwards
+):
+    dataset = TransitionDataset(
+        pd.DataFrame(
+            {
+                "state": [0, 1, 2, 3],
+                "action": [0, 1, 2, 3],
+                "reward": [0.1, 0.2, 0.3, 0.4],
+                "next_state": [1, 2, 3, 4],
+                "done": [False, False, False, True],
+            }
+        )
+    )
+    config = ExperimentConfig.from_dict(
+        {
+            "network": {"hidden_sizes": [8]},
+            "training": {"algorithms": [algorithm], "epochs": 1, "batch_size": 2},
+        }
+    )
+    original_forward = QNetwork.forward
+    calls = 0
+
+    def recording_forward(model, states):
+        nonlocal calls
+        calls += 1
+        return original_forward(model, states)
+
+    monkeypatch.setattr(QNetwork, "forward", recording_forward)
+    _, metrics = train_model(algorithm, dataset, config, torch.device("cpu"))
+    assert metrics["global_steps"] == 2
+    assert calls == expected_forwards

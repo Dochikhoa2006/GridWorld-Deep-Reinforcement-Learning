@@ -153,8 +153,12 @@ def train_model(
 
             online_q = model(states)
             with torch.no_grad():
-                next_online_q = model(next_states)
                 next_target_q = target_model(next_states)
+                next_online_q = (
+                    model(next_states)
+                    if algorithm in {"double_dqn", "expected_sarsa"}
+                    else next_target_q
+                )
             _require_finite(
                 {
                     "online Q-values": online_q,
