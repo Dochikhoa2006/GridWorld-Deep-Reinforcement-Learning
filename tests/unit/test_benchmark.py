@@ -87,6 +87,46 @@ def test_every_pair_is_included_once_for_single_seed(tmp_path):
     assert pairs[1]["wins"] == 1
 
 
+def test_action_stability_uses_aligned_rows_and_seed_pairs(tmp_path):
+    paths = _runs(tmp_path, {"dqn": [0.5, 0.5, 0.5]}, [9, 2, 7])
+    for path, values in zip(
+        paths, [[0, 1, 2, 3], [0, 1, 3, 2], [0, 2, 2, 3]], strict=True
+    ):
+        (path / "predictions.json").write_text(
+            json.dumps({"predictions": {"dqn": values}})
+        )
+    aggregate = aggregate_runs(paths, [9, 2, 7])
+    stability = aggregate["action_stability"]["dqn"]
+    assert stability["evaluation_rows"] == 4
+    assert stability["seed_pairs"] == [
+        {"first_seed": 9, "second_seed": 2, "agreement": 0.5},
+        {"first_seed": 9, "second_seed": 7, "agreement": 0.75},
+        {"first_seed": 2, "second_seed": 7, "agreement": 0.25},
+    ]
+    assert stability["pairwise_agreement"]["mean"] == 0.5
+    generate_benchmark_report(tmp_path, aggregate)
+    assert (
+        "| DQN | 4 | 3 | 50.00% | 25.00% |" in (tmp_path / "benchmark.md").read_text()
+    )
+
+
+@pytest.mark.parametrize("corruption", ["missing", "rows", "action", "algorithm"])
+def test_action_stability_rejects_invalid_prediction_artifacts(tmp_path, corruption):
+    paths = _runs(tmp_path, {"dqn": [0.5, 0.5]}, [1, 2])
+    (paths[0] / "predictions.json").write_text(
+        json.dumps({"predictions": {"dqn": [0, 1]}})
+    )
+    if corruption != "missing":
+        values = {
+            "rows": {"dqn": [0]},
+            "action": {"dqn": [0, 4]},
+            "algorithm": {"cql": [0, 1]},
+        }[corruption]
+        (paths[1] / "predictions.json").write_text(json.dumps({"predictions": values}))
+    with pytest.raises(ValueError, match="prediction"):
+        aggregate_runs(paths, [1, 2])
+
+
 def test_single_algorithm_and_legacy_reports(tmp_path):
     aggregate = aggregate_runs(_runs(tmp_path, {"dqn": [0.5]}, [1]), [1])
     assert aggregate["paired_comparisons"] == []

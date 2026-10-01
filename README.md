@@ -225,6 +225,14 @@ One seed produces a standard deviation of zero; a single algorithm produces no
 pairs. Aggregation rejects duplicate seeds, mismatched seed metadata, and invalid
 agreement values.
 
+Benchmarks also report action stability for each algorithm across seed pairs.
+The aggregate JSON's `action_stability` records agreement on identical evaluation
+rows for every pair, plus the mean and sample standard deviation of those pairwise
+rates. This uses saved predictions without consulting solution labels. A high rate
+means the algorithm tends to choose the same actions across seeds; it does not
+establish that those actions are correct. Aggregation checks prediction actions and
+row alignment before publishing the benchmark.
+
 ### 6. Run the test suite
 
 ```bash

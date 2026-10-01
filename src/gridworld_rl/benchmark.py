@@ -44,6 +44,81 @@ def _summary(values: Iterable[float]) -> dict[str, float]:
     }
 
 
+def _action_stability(
+    run_dirs: list[Path],
+    algorithms: set[str],
+    seeds: list[int],
+    num_actions: int,
+    expected_rows: list[int | None],
+) -> dict[str, Any] | None:
+    """Compare saved actions on aligned evaluation rows across seed pairs."""
+
+    paths = [run_dir / "predictions.json" for run_dir in run_dirs]
+    if not any(path.exists() for path in paths):
+        return None  # Older run bundles may have metrics without predictions.
+    if not all(path.is_file() for path in paths):
+        raise ValueError("Benchmark runs have inconsistent prediction artifacts.")
+    predictions = []
+    for path, row_count in zip(paths, expected_rows, strict=True):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        actions = payload.get("predictions") if isinstance(payload, dict) else None
+        if not isinstance(actions, dict) or set(actions) != algorithms:
+            raise ValueError(f"Invalid benchmark predictions: {path}")
+        for algorithm, values in actions.items():
+            if (
+                not isinstance(values, list)
+                or not values
+                or any(
+                    isinstance(value, bool)
+                    or not isinstance(value, int)
+                    or not 0 <= value < num_actions
+                    for value in values
+                )
+            ):
+                raise ValueError(
+                    f"Invalid benchmark predictions for {algorithm}: {path}"
+                )
+            if row_count is not None and len(values) != row_count:
+                raise ValueError(
+                    f"Benchmark predictions do not match evaluation rows for {algorithm}: {path}"
+                )
+        if len({len(values) for values in actions.values()}) != 1:
+            raise ValueError(
+                f"Benchmark predictions have inconsistent algorithm rows: {path}"
+            )
+        predictions.append(actions)
+
+    result = {}
+    for algorithm in sorted(algorithms):
+        lengths = {len(run[algorithm]) for run in predictions}
+        if len(lengths) != 1:
+            raise ValueError(
+                f"Benchmark predictions have inconsistent rows for {algorithm}."
+            )
+        pairs = []
+        for first_index, second_index in combinations(range(len(seeds)), 2):
+            first = predictions[first_index][algorithm]
+            second = predictions[second_index][algorithm]
+            agreement = sum(
+                left == right for left, right in zip(first, second, strict=True)
+            ) / len(first)
+            pairs.append(
+                {
+                    "first_seed": seeds[first_index],
+                    "second_seed": seeds[second_index],
+                    "agreement": agreement,
+                }
+            )
+        result[algorithm] = {
+            "evaluation_rows": lengths.pop(),
+            "pairwise_agreement": _summary(pair["agreement"] for pair in pairs)
+            if pairs
+            else None,
+            "seed_pairs": pairs,
+        }
+    return result
+
+
 def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
     """Aggregate compatible run metrics without reading solution labels."""
 
@@ -115,6 +190,18 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
     algorithm_sets = [set(run["algorithms"]) for run in metrics]
     if any(algorithms != algorithm_sets[0] for algorithms in algorithm_sets[1:]):
         raise ValueError("Benchmark runs do not contain the same algorithms.")
+    stability = _action_stability(
+        run_dirs,
+        algorithm_sets[0],
+        seeds,
+        configurations[0]["dataset"]["num_actions"],
+        [
+            run["algorithms"][next(iter(algorithm_sets[0]))]["evaluation"].get(
+                "num_examples"
+            )
+            for run in metrics
+        ],
+    )
 
     algorithms: dict[str, Any] = {}
     for algorithm in sorted(algorithm_sets[0]):
@@ -244,7 +331,7 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
             }
         )
 
-    return {
+    aggregate = {
         "schema_version": 1,
         "seeds": seeds,
         "num_runs": len(run_dirs),
@@ -255,6 +342,9 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
         "provenance": {field: metrics[0].get(field) for field in provenance_fields},
         "run_directories": [str(path) for path in run_dirs],
     }
+    if stability is not None:
+        aggregate["action_stability"] = stability
+    return aggregate
 
 
 def generate_benchmark_report(
@@ -426,6 +516,31 @@ def generate_benchmark_report(
                 f"| {100 * difference['minimum']:+.2f} "
                 f"| {100 * difference['maximum']:+.2f} "
                 f"| {comparison['wins']} / {comparison['ties']} / {comparison['losses']} |"
+            )
+    stability = aggregate.get("action_stability")
+    if stability and all(
+        stability[name]["pairwise_agreement"] is not None for name in algorithm_names
+    ):
+        lines.extend(
+            [
+                "",
+                "## Action stability across seeds",
+                "",
+                "Each seed pair is compared on the same evaluation rows. "
+                "Agreement measures identical predicted actions without using labels.",
+                "",
+                "| Algorithm | Rows | Seed pairs | Mean agreement | Sample std |",
+                "|---|---:|---:|---:|---:|",
+            ]
+        )
+        for algorithm in algorithm_names:
+            result = stability[algorithm]
+            agreement = result["pairwise_agreement"]
+            lines.append(
+                f"| {DISPLAY_NAMES.get(algorithm, algorithm)} "
+                f"| {result['evaluation_rows']} | {len(result['seed_pairs'])} "
+                f"| {100 * agreement['mean']:.2f}% "
+                f"| {100 * agreement['std']:.2f}% |"
             )
     lines.extend(
         [

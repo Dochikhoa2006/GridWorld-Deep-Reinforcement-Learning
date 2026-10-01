@@ -260,6 +260,12 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
         "minimum",
         "maximum",
     }
+    stability = aggregate["action_stability"]["dqn"]
+    assert stability["evaluation_rows"] == 4
+    assert [
+        (pair["first_seed"], pair["second_seed"]) for pair in stability["seed_pairs"]
+    ] == [(3, 5)]
+    assert 0 <= stability["pairwise_agreement"]["mean"] <= 1
     assert (benchmark_dir / "benchmark.png").stat().st_size > 0
     assert (benchmark_dir / "benchmark.md").is_file()
     assert verify_artifacts(benchmark_dir).valid
@@ -270,6 +276,7 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
     benchmark_summary = (benchmark_dir / "benchmark.md").read_text()
     assert "| Algorithm | Agreement mean | Agreement std" in benchmark_summary
     assert "Macro F1 mean | Macro F1 std" in benchmark_summary
+    assert "Action stability across seeds" in benchmark_summary
     assert "| DQN | Unseen state | 0 | N/A | N/A |" in benchmark_summary
     assert "| DQN |" in benchmark_summary
     assert "%" in benchmark_summary.split("| DQN |", maxsplit=1)[1]
