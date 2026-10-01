@@ -457,8 +457,9 @@ is `0` for an intact artifact directory, `1` for file mismatches, and `2` for an
 invalid or unreadable manifest/directory. Empty directories are ignored. Manifest
 paths must be relative and canonical; symbolic links are rejected. Hashes detect
 changes relative to the manifest, but do not authenticate its author. Regenerating
-a report refreshes its run manifest; doing so inside a benchmark can invalidate
-the benchmark's original manifest.
+a report first verifies the existing run manifest and refuses modified, missing,
+or unexpected files. A successful refresh updates that manifest; doing so inside
+a benchmark can invalidate the benchmark's original manifest.
 
 See [Architecture](docs/ARCHITECTURE.md) for component and data-flow details.
 

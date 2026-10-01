@@ -146,6 +146,29 @@ def test_end_to_end_run_writes_loadable_reproducible_artifacts(tmp_path) -> None
     )
 
 
+@pytest.mark.parametrize("damage", ["modified", "missing", "unexpected"])
+def test_report_refresh_refuses_damaged_run_without_rehashing(tmp_path, damage) -> None:
+    run_dir = run_experiment(_config(tmp_path))
+    report_files = [
+        "report.png",
+        "confusion_matrices.png",
+        "summary.md",
+        "manifest.json",
+    ]
+    before = {name: (run_dir / name).read_bytes() for name in report_files}
+    checkpoint = run_dir / "checkpoints/dqn.pt"
+    if damage == "modified":
+        checkpoint.write_bytes(checkpoint.read_bytes() + b"changed")
+    elif damage == "missing":
+        checkpoint.rename(run_dir / "checkpoints/saved.pt")
+    else:
+        (run_dir / "extra.txt").write_text("unexpected")
+
+    with pytest.raises(ValueError, match="invalid artifact integrity"):
+        generate_report(run_dir)
+    assert {name: (run_dir / name).read_bytes() for name in report_files} == before
+
+
 def test_seeded_runs_produce_identical_histories_and_predictions(tmp_path) -> None:
     first_dir = run_experiment(_config(tmp_path, "first"))
     second_dir = run_experiment(_config(tmp_path, "second"))

@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .evaluation import EVALUATION_SLICES
+from .integrity import verify_artifacts
 from .reproducibility import sha256_file
 
 DISPLAY_NAMES = {
@@ -48,6 +49,15 @@ def generate_report(run_dir: str | Path) -> list[Path]:
     """Regenerate figures and a Markdown summary using only saved metrics."""
 
     directory, metrics = _load_metrics(run_dir)
+    manifest_path = directory / "manifest.json"
+    if manifest_path.exists() or manifest_path.is_symlink():
+        verification = verify_artifacts(directory)
+        if not verification.valid:
+            raise ValueError(
+                "Cannot refresh a run with invalid artifact integrity: "
+                f"missing={verification.missing}, modified={verification.modified}, "
+                f"unexpected={verification.unexpected}."
+            )
     algorithms = list(metrics["algorithms"])
     names = [DISPLAY_NAMES.get(name, name) for name in algorithms]
 
