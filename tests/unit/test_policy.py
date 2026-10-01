@@ -138,3 +138,25 @@ def test_changed_checkpoint_aborts_export(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="changed during"):
         export_policy(path, tmp_path / "policy.json")
     assert not (tmp_path / "policy.json").exists()
+
+
+def test_export_streams_bounded_batches_and_cleans_up_late_failure(
+    tmp_path, monkeypatch
+):
+    path, _ = _checkpoint(tmp_path)
+    original_forward = QNetwork.forward
+    batches = []
+
+    def recording_forward(model, states):
+        batches.append(states.tolist())
+        result = original_forward(model, states)
+        if states[0].item() == 4:
+            result[0, 0] = float("nan")
+        return result
+
+    monkeypatch.setattr(QNetwork, "forward", recording_forward)
+    output = tmp_path / "policy.json"
+    with pytest.raises(ValueError, match="non-finite Q-values"):
+        export_policy(path, output, batch_size=2)
+    assert batches == [[0, 1], [2, 3], [4]]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["model.pt"]

@@ -486,6 +486,8 @@ available device. Checkpoint dimensions, architecture, version, and finite weigh
 are validated before export. Existing output paths are refused, and the completed
 JSON is published atomically. Store exports outside immutable run/benchmark
 directories to keep their integrity manifests valid.
+Policy rows are written in batches to a temporary file, so export memory use
+does not grow with the number of states.
 
 ## Repository structure
 

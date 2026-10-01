@@ -36,43 +36,7 @@ def export_policy(
     fingerprint = sha256_file(checkpoint)
     model, metadata = load_checkpoint(checkpoint)
     model.to(selected_device)
-    rows = []
-    with torch.inference_mode():
-        for start in range(0, model.num_states, batch_size):
-            states = torch.arange(
-                start, min(start + batch_size, model.num_states), device=selected_device
-            )
-            values = model(states)
-            if not torch.isfinite(values).all():
-                raise ValueError("Checkpoint produces non-finite Q-values.")
-            actions = values.argmax(dim=1)
-            best = values.topk(2, dim=1).values
-            best_cpu = best.cpu().double()
-            gaps = (best_cpu[:, 0] - best_cpu[:, 1]).tolist()
-            ties = (values == best[:, :1]).sum(dim=1).cpu().tolist()
-            for index, (q_values, action, gap, count) in enumerate(
-                zip(
-                    values.cpu().tolist(),
-                    actions.cpu().tolist(),
-                    gaps,
-                    ties,
-                    strict=True,
-                )
-            ):
-                rows.append(
-                    {
-                        "state": start + index,
-                        "action": action,
-                        "q_values": q_values,
-                        "action_gap": gap,
-                        "num_greedy_actions": count,
-                    }
-                )
-    if sha256_file(checkpoint) != fingerprint:
-        raise ValueError(
-            "Checkpoint changed during policy export; retry with a stable file."
-        )
-    payload = {
+    metadata = {
         "schema_version": 1,
         "algorithm": metadata["algorithm"],
         "checkpoint_sha256": fingerprint,
@@ -80,7 +44,6 @@ def export_policy(
         "num_actions": model.num_actions,
         "device": str(selected_device),
         "tie_breaking": "lowest action index among exact maximum Q-values",
-        "policy": rows,
     }
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = None
@@ -94,8 +57,56 @@ def export_policy(
             delete=False,
         ) as temporary:
             temporary_path = Path(temporary.name)
-            json.dump(payload, temporary, indent=2, sort_keys=True, allow_nan=False)
-            temporary.write("\n")
+            # Write the metadata once, then stream policy rows in state order.
+            temporary.write("{\n")
+            for key, value in sorted(metadata.items()):
+                temporary.write(f"  {json.dumps(key)}: ")
+                json.dump(value, temporary, sort_keys=True, allow_nan=False)
+                temporary.write(",\n")
+            temporary.write('  "policy": [\n')
+            with torch.inference_mode():
+                for start in range(0, model.num_states, batch_size):
+                    states = torch.arange(
+                        start,
+                        min(start + batch_size, model.num_states),
+                        device=selected_device,
+                    )
+                    values = model(states)
+                    if not torch.isfinite(values).all():
+                        raise ValueError("Checkpoint produces non-finite Q-values.")
+                    actions = values.argmax(dim=1)
+                    best = values.topk(2, dim=1).values
+                    best_cpu = best.cpu().double()
+                    gaps = (best_cpu[:, 0] - best_cpu[:, 1]).tolist()
+                    ties = (values == best[:, :1]).sum(dim=1).cpu().tolist()
+                    for index, (q_values, action, gap, count) in enumerate(
+                        zip(
+                            values.cpu().tolist(),
+                            actions.cpu().tolist(),
+                            gaps,
+                            ties,
+                            strict=True,
+                        )
+                    ):
+                        if start + index:
+                            temporary.write(",\n")
+                        json.dump(
+                            {
+                                "state": start + index,
+                                "action": action,
+                                "q_values": q_values,
+                                "action_gap": gap,
+                                "num_greedy_actions": count,
+                            },
+                            temporary,
+                            sort_keys=True,
+                            allow_nan=False,
+                        )
+            temporary.write("\n  ]\n}\n")
+        if sha256_file(checkpoint) != fingerprint:
+            raise ValueError(
+                "Checkpoint changed during policy export; retry with a stable file."
+            )
         # An atomic no-clobber publication, including competing exporters.
         os.link(temporary_path, destination)
     finally:
