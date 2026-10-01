@@ -88,8 +88,8 @@ def test_rejects_invalid_batch_size(tmp_path, batch_size):
         ("num_actions", True, "num_actions"),
         ("network", None, "hidden_sizes"),
         ("network", {"hidden_sizes": [False]}, "hidden_sizes"),
-        ("model_state_dict", {"x": "bad"}, "finite tensors"),
-        ("model_state_dict", {"x": torch.tensor(float("nan"))}, "finite tensors"),
+        ("model_state_dict", {"x": "bad"}, "layer mismatch"),
+        ("model_state_dict", {"x": torch.tensor(float("nan"))}, "layer mismatch"),
     ],
 )
 def test_rejects_malformed_checkpoint_metadata(tmp_path, field, value, message):
@@ -107,6 +107,31 @@ def test_legacy_checkpoint_without_version_loads(tmp_path):
     torch.save(payload, path)
     model, _ = load_checkpoint(path)
     assert model.num_states == 5
+
+
+@pytest.mark.parametrize(
+    "damage", ["missing", "unexpected", "shape", "dtype", "value", "nonfinite"]
+)
+def test_checkpoint_rejects_incompatible_weight_dictionary(tmp_path, damage):
+    path, payload = _checkpoint(tmp_path)
+    weights = payload["model_state_dict"]
+    name = "network.0.weight"
+    if damage == "missing":
+        del weights[name]
+    elif damage == "unexpected":
+        weights["extra.weight"] = torch.zeros(1)
+    elif damage == "shape":
+        weights[name] = weights[name][:-1]
+    elif damage == "dtype":
+        weights[name] = weights[name].double()
+    elif damage == "value":
+        weights[name] = "invalid"
+    else:
+        weights[name][0, 0] = float("nan")
+    torch.save(payload, path)
+    with pytest.raises(ValueError, match="model_state_dict"):
+        export_policy(path, tmp_path / "policy.json")
+    assert not (tmp_path / "policy.json").exists()
 
 
 def test_corrupt_checkpoint_has_clear_error(tmp_path):

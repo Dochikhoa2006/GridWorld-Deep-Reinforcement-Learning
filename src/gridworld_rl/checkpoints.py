@@ -54,17 +54,41 @@ def load_checkpoint(
         raise ValueError(
             "Checkpoint network.hidden_sizes must contain positive integers."
         )
-    if not isinstance(payload["model_state_dict"], dict) or any(
-        not isinstance(value, torch.Tensor) or not torch.isfinite(value).all()
-        for value in payload["model_state_dict"].values()
+    state_dict = payload["model_state_dict"]
+    if not isinstance(state_dict, dict) or any(
+        not isinstance(name, str) for name in state_dict
     ):
-        raise ValueError("Checkpoint model_state_dict must contain finite tensors.")
+        raise ValueError("Checkpoint model_state_dict must map layer names to tensors.")
     model = QNetwork(
         num_states=payload["num_states"],
         num_actions=payload["num_actions"],
         hidden_sizes=hidden_sizes,
     )
-    model.load_state_dict(payload["model_state_dict"])
+    expected = model.state_dict()
+    missing = sorted(set(expected) - set(state_dict))
+    unexpected = sorted(set(state_dict) - set(expected))
+    if missing or unexpected:
+        raise ValueError(
+            "Checkpoint model_state_dict layer mismatch: "
+            f"missing={missing}, unexpected={unexpected}."
+        )
+    for name, reference in expected.items():
+        value = state_dict[name]
+        if not isinstance(value, torch.Tensor) or value.layout != torch.strided:
+            raise ValueError(
+                f"Checkpoint model_state_dict {name} must be a dense tensor."
+            )
+        if value.shape != reference.shape or value.dtype != reference.dtype:
+            raise ValueError(
+                f"Checkpoint model_state_dict {name} has shape/dtype "
+                f"{tuple(value.shape)}/{value.dtype}; expected "
+                f"{tuple(reference.shape)}/{reference.dtype}."
+            )
+        if not torch.isfinite(value).all():
+            raise ValueError(
+                f"Checkpoint model_state_dict {name} must contain finite tensors."
+            )
+    model.load_state_dict(state_dict)
     model.to(device)
     model.eval()
     return model, payload

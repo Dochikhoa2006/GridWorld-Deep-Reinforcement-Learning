@@ -496,9 +496,11 @@ it does not establish that those predictions are reliable.
 
 Inference defaults to CPU; `--device auto`, `cuda`, or `mps` selects another
 available device. Checkpoint dimensions, architecture, version, and finite weights
-are validated before export. Existing output paths are refused, and the completed
-JSON is published atomically. Store exports outside immutable run/benchmark
-directories to keep their integrity manifests valid.
+are validated before export, including layer names, tensor shapes, and dtypes.
+Existing output paths are refused, and the completed JSON is published atomically.
+Store exports outside immutable run/benchmark directories to keep their integrity
+manifests valid.
+
 Policy rows are written in batches to a temporary file, so export memory use
 does not grow with the number of states.
 
