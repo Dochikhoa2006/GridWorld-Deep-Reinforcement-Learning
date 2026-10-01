@@ -100,6 +100,8 @@ def test_cli_predict_and_no_clobber(tmp_path, capsys):
         ("state,state\n0,1\n", "exactly one column"),
         ("state\nfoo\n", "non-integer"),
         ("state\n1.5\n", "non-integer"),
+        ("state\n1.0000000000000001\n", "non-integer"),
+        ("state\n4.9999999999999999\n", "non-integer"),
         ("state\nNaN\n", "non-integer"),
         ("state\ninf\n", "non-integer"),
         ("state\n-1\n", "out-of-range"),
@@ -179,7 +181,7 @@ def test_publication_race_preserves_competing_output(tmp_path, monkeypatch):
 def test_accepts_integer_valued_numeric_state(tmp_path):
     checkpoint = _checkpoint(tmp_path)
     source = tmp_path / "states.csv"
-    source.write_text("state\n1.0\n")
+    source.write_text("state\n1.0000000000000000\n")
     output = tmp_path / "predictions.csv"
     predict_csv(checkpoint, source, output)
     assert pd.read_csv(output)["state"].tolist() == [1]

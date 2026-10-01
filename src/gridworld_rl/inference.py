@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import csv
-import math
 import os
 import tempfile
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import torch
@@ -100,12 +100,12 @@ def predict_csv(
                         f"State CSV row {row_count} must contain one state."
                     )
                 try:
-                    value = float(row[0])
-                except ValueError as exc:
+                    value = Decimal(row[0])
+                except InvalidOperation as exc:
                     raise ValueError(
                         f"State CSV has a non-integer or non-finite state at row {row_count}."
                     ) from exc
-                if not math.isfinite(value) or not value.is_integer():
+                if not value.is_finite() or value != value.to_integral_value():
                     raise ValueError(
                         f"State CSV has a non-integer or non-finite state at row {row_count}."
                     )
