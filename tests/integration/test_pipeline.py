@@ -169,6 +169,20 @@ def test_report_refresh_refuses_damaged_run_without_rehashing(tmp_path, damage) 
     assert {name: (run_dir / name).read_bytes() for name in report_files} == before
 
 
+def test_step_limited_run_saves_partial_epoch_metadata(tmp_path) -> None:
+    config = _config(tmp_path)
+    config.training.max_optimizer_steps = 1
+    run_dir = run_experiment(config)
+    metrics = json.loads((run_dir / "metrics.json").read_text())
+    training = metrics["algorithms"]["dqn"]
+    assert training["global_steps"] == 1
+    assert training["planned_global_steps"] == 4
+    assert training["completed_epochs"] == 0
+    assert training["partial_epoch_batches"] == 1
+    assert len(training["training_history"]["total_loss"]) == 1
+    assert verify_artifacts(run_dir).valid
+
+
 def test_seeded_runs_produce_identical_histories_and_predictions(tmp_path) -> None:
     first_dir = run_experiment(_config(tmp_path, "first"))
     second_dir = run_experiment(_config(tmp_path, "second"))

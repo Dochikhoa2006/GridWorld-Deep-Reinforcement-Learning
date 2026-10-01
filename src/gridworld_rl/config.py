@@ -35,6 +35,7 @@ class TrainingConfig:
     min_learning_rate_ratio: float = 0.0
     batch_size: int = 128
     gradient_accumulation_steps: int = 1
+    max_optimizer_steps: int | None = None
     gamma: float = 0.99
     epsilon: float = 0.1
     cql_alpha: float = 1.0
@@ -179,6 +180,12 @@ class ExperimentConfig:
                 "training.gradient_accumulation_steps, and "
                 "training.target_update_interval must be positive integers."
             )
+        if t.max_optimizer_steps is not None and (
+            isinstance(t.max_optimizer_steps, bool)
+            or not isinstance(t.max_optimizer_steps, int)
+            or t.max_optimizer_steps <= 0
+        ):
+            raise ValueError("training.max_optimizer_steps must be a positive integer.")
         if (
             isinstance(t.learning_rate, bool)
             or not isinstance(t.learning_rate, (int, float))

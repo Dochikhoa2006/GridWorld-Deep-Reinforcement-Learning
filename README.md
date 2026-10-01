@@ -327,6 +327,7 @@ specification. Major controls include:
 | `training.min_learning_rate_ratio` | Cosine endpoint as a fraction of the base rate (default: 0) |
 | `training.batch_size`             | Transitions per minibatch                                   |
 | `training.gradient_accumulation_steps` | Minibatches per optimizer update (default: 1)           |
+| `training.max_optimizer_steps`  | Optional cap on optimizer updates (`null` by default)      |
 | `training.gamma`                  | Bellman discount factor                                     |
 | `training.epsilon`                | Expected SARSA epsilon-greedy probability                   |
 | `training.cql_alpha`              | Conservative penalty weight                                 |
@@ -352,6 +353,14 @@ end of each epoch. Gradient clipping, `global_steps`, and target-network updates
 operate on optimizer updates. Epoch losses are averages over transitions, so a
 short final minibatch is weighted correctly. The default of 1 keeps one optimizer
 update per minibatch.
+
+To cap training work, pass `--max-optimizer-steps 1000` to `train` or
+`benchmark`. The cap counts optimizer updates after gradient accumulation. If it
+falls inside an epoch, training stops after the complete accumulation window and
+records that partial epoch's losses. Saved metrics include `planned_global_steps`,
+`completed_epochs`, and `partial_epoch_batches`; `global_steps` is the number
+actually run. When a cap is active, warmup and cosine decay use the capped update
+count, so warmup must be shorter than that count.
 
 Optional learning-rate warmup and cosine decay are available for both `train` and
 `benchmark`, for example `--learning-rate-schedule cosine --warmup-steps 10

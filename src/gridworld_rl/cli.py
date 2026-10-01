@@ -149,6 +149,11 @@ def _add_training_override_arguments(
         type=int,
         help="minibatches per optimizer update (default: 1)",
     )
+    parser.add_argument(
+        "--max-optimizer-steps",
+        type=int,
+        help="stop after this many optimizer updates, including partial epochs",
+    )
     parser.add_argument("--gamma", type=float, help="override training.gamma")
     parser.add_argument("--epsilon", type=float, help="override training.epsilon")
     parser.add_argument("--device", help="override training.device (auto/cpu/cuda/mps)")
@@ -185,6 +190,7 @@ def _apply_training_overrides(
         "min_learning_rate_ratio",
         "batch_size",
         "gradient_accumulation_steps",
+        "max_optimizer_steps",
         "gamma",
         "epsilon",
         "device",

@@ -34,6 +34,7 @@
     "gradient_clip_norm": 10.0,
     "learning_rate": 0.001,
     "learning_rate_schedule": "constant",
+    "max_optimizer_steps": null,
     "min_learning_rate_ratio": 0.0,
     "num_workers": 0,
     "seed": 42,

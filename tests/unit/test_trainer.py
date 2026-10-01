@@ -114,6 +114,84 @@ def test_epoch_metrics_weight_transitions():
         _mean_history([])
 
 
+@pytest.mark.parametrize("value", [0, -1, True, 1.5, "3"])
+def test_max_optimizer_steps_rejects_invalid_values(value):
+    with pytest.raises(ValueError, match="max_optimizer_steps"):
+        ExperimentConfig.from_dict({"training": {"max_optimizer_steps": value}})
+
+
+@pytest.mark.parametrize("command", ["train", "benchmark"])
+def test_max_optimizer_steps_cli_override(command):
+    argv = [command, "--max-optimizer-steps", "4"]
+    if command == "benchmark":
+        argv += ["--seeds", "1", "2"]
+    config = _apply_training_overrides(
+        ExperimentConfig(), build_parser().parse_args(argv)
+    )
+    assert config.training.max_optimizer_steps == 4
+
+
+def test_step_budget_stops_after_full_accumulation_window_in_partial_epoch():
+    dataset = TransitionDataset(
+        pd.DataFrame(
+            {
+                "state": [i % 8 for i in range(10)],
+                "action": [i % 4 for i in range(10)],
+                "reward": [0.1 * i for i in range(10)],
+                "next_state": [(i + 1) % 8 for i in range(10)],
+                "done": [i % 3 == 0 for i in range(10)],
+            }
+        )
+    )
+    config = ExperimentConfig.from_dict(
+        {
+            "network": {"hidden_sizes": [8]},
+            "training": {
+                "epochs": 5,
+                "batch_size": 2,
+                "gradient_accumulation_steps": 2,
+                "max_optimizer_steps": 4,
+                "learning_rate_schedule": "cosine",
+                "target_update_interval": 2,
+            },
+        }
+    )
+    shorter = copy.deepcopy(config)
+    shorter.training.epochs = 2
+    model, metrics = train_model("dqn", dataset, config, torch.device("cpu"))
+    short_model, short_metrics = train_model(
+        "dqn", dataset, shorter, torch.device("cpu")
+    )
+    assert metrics["global_steps"] == short_metrics["global_steps"] == 4
+    assert metrics["planned_global_steps"] == 15
+    assert metrics["completed_epochs"] == 1
+    assert metrics["partial_epoch_batches"] == 2
+    assert len(metrics["training_history"]["total_loss"]) == 2
+    assert metrics["target_synchronizations"] == 3
+    assert metrics["training_history"] == short_metrics["training_history"]
+    for name, value in model.state_dict().items():
+        torch.testing.assert_close(value, short_model.state_dict()[name])
+
+
+def test_step_budget_rejects_warmup_that_consumes_every_update():
+    dataset = TransitionDataset(
+        pd.DataFrame(
+            {
+                "state": [0, 1],
+                "action": [0, 1],
+                "reward": [0.0, 0.0],
+                "next_state": [1, 0],
+                "done": [True, True],
+            }
+        )
+    )
+    config = ExperimentConfig.from_dict(
+        {"training": {"max_optimizer_steps": 1, "warmup_steps": 1}}
+    )
+    with pytest.raises(ValueError, match="warmup_steps"):
+        train_model("dqn", dataset, config, torch.device("cpu"))
+
+
 @pytest.mark.parametrize(
     "algorithm,expected_forwards",
     [("dqn", 4), ("cql", 4), ("double_dqn", 6), ("expected_sarsa", 6)],

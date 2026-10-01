@@ -104,8 +104,11 @@ def train_model(
     effective_batch_size = (
         config.training.batch_size * config.training.gradient_accumulation_steps
     )
-    total_steps = config.training.epochs * (
+    planned_steps = config.training.epochs * (
         (len(dataset) + effective_batch_size - 1) // effective_batch_size
+    )
+    total_steps = min(
+        planned_steps, config.training.max_optimizer_steps or planned_steps
     )
     # Validate the schedule before constructing models or doing any training.
     learning_rate_for_step(config.training, 0, total_steps)
@@ -135,10 +138,13 @@ def train_model(
     }
     global_step = 0
     target_syncs = 1
+    completed_epochs = 0
+    partial_epoch_batches = 0
     accumulation_steps = config.training.gradient_accumulation_steps
     model.train()
     for _epoch in range(config.training.epochs):
         epoch_metrics: list[tuple[int, dict[str, float]]] = []
+        processed_batches = 0
         optimizer.zero_grad(set_to_none=True)
         for batch_index, batch in enumerate(loader):
             context = (
@@ -227,15 +233,27 @@ def train_model(
                     )
                     target_syncs += 1
             epoch_metrics.append((len(states), parts))
+            processed_batches += 1
+            if global_step == total_steps:
+                break
 
         averages = _mean_history(epoch_metrics)
         for key, value in averages.items():
             history[key].append(value)
         history["learning_rate"].append(optimizer.param_groups[0]["lr"])
+        if processed_batches == len(loader):
+            completed_epochs += 1
+        else:
+            partial_epoch_batches = processed_batches
+        if global_step == total_steps:
+            break
 
     return model, {
         "training_history": history,
         "global_steps": global_step,
+        "planned_global_steps": planned_steps,
+        "completed_epochs": completed_epochs,
+        "partial_epoch_batches": partial_epoch_batches,
         "target_synchronizations": target_syncs,
         "parameter_count": sum(parameter.numel() for parameter in model.parameters()),
     }
