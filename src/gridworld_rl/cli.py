@@ -76,6 +76,9 @@ def build_parser() -> argparse.ArgumentParser:
         "validate", help="validate configured CSV schemas and evaluation alignment"
     )
     _add_config_argument(validate)
+    validate.add_argument(
+        "--json", action="store_true", help="print dataset diagnostics as JSON"
+    )
     verify = subparsers.add_parser(
         "verify", help="verify saved experiment or benchmark artifact integrity"
     )
@@ -233,24 +236,41 @@ def _normalize_argv(argv: Sequence[str] | None) -> list[str]:
     return arguments
 
 
-def _validate(config: ExperimentConfig) -> str:
-    from .data import load_evaluation_data, load_transition_csv
+def _validate(config: ExperimentConfig) -> dict[str, object]:
+    from .data import (
+        evaluation_split_diagnostics,
+        load_evaluation_data,
+        load_transition_csv,
+        transition_diagnostics,
+    )
 
     train = load_transition_csv(
         config.dataset.train,
         num_states=config.dataset.num_states,
         num_actions=config.dataset.num_actions,
     )
-    challenge, _solution = load_evaluation_data(
+    challenge, solution = load_evaluation_data(
         config.dataset.eval_challenge,
         config.dataset.eval_solution,
         num_states=config.dataset.num_states,
         num_actions=config.dataset.num_actions,
     )
-    return (
-        f"Validated {len(train):,} training transitions and "
-        f"{len(challenge):,} aligned evaluation transitions."
-    )
+    return {
+        "schema_version": 1,
+        "train_rows": len(train),
+        "eval_rows": len(challenge),
+        "training_diagnostics": transition_diagnostics(
+            train,
+            num_states=config.dataset.num_states,
+            num_actions=config.dataset.num_actions,
+        ),
+        "evaluation_split_diagnostics": evaluation_split_diagnostics(
+            train,
+            solution,
+            num_states=config.dataset.num_states,
+            num_actions=config.dataset.num_actions,
+        ),
+    }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -285,7 +305,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             print(f"Benchmark complete: {benchmark_dir.resolve()}")
         elif args.command == "validate":
-            print(_validate(_load_config(args.config, args.data_dir)))
+            result = _validate(_load_config(args.config, args.data_dir))
+            if args.json:
+                print(json.dumps(result, sort_keys=True, allow_nan=False))
+            else:
+                print(
+                    f"Validated {result['train_rows']:,} training transitions and "
+                    f"{result['eval_rows']:,} aligned evaluation transitions."
+                )
+                training = result["training_diagnostics"]
+                evaluation = result["evaluation_split_diagnostics"]
+                print(
+                    "Observed state-action coverage: "
+                    f"{100 * training['state_action_coverage']:.2f}%."
+                )
+                print(
+                    "Exact evaluation/training transition overlap: "
+                    f"{100 * evaluation['exact_training_overlap_fraction']:.2f}%."
+                )
         elif args.command == "export-policy":
             from .policy import export_policy
 

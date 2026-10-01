@@ -146,9 +146,11 @@ training and evaluation pipeline does not consume them.
 gridworld-rl validate --config configs/default.json
 ```
 
-The command checks the configured files and verifies that evaluation rows align. A
-missing or malformed dataset exits with a contextual error instead of failing during
-model training.
+The command checks the configured files, verifies that evaluation rows align, and
+prints training state-action coverage plus exact evaluation/training transition
+overlap. Use `--json` for row counts and the full training and evaluation-split
+diagnostics in one machine-readable object. It creates no run artifacts. A missing
+or malformed dataset exits with a contextual error before model training.
 
 ### 4. Run one experiment
 

@@ -279,6 +279,29 @@ def test_cli_reports_missing_dataset_without_traceback(tmp_path, capsys) -> None
     assert "Dataset file not found" in capsys.readouterr().err
 
 
+def test_validate_reports_coverage_and_overlap_without_training(tmp_path, capsys):
+    config = _config(tmp_path)
+    config_path = tmp_path / "config.json"
+    config.to_json(config_path)
+
+    assert main(["validate", "--config", str(config_path)]) == 0
+    output = capsys.readouterr().out
+    assert (
+        "Validated 8 training transitions and 4 aligned evaluation transitions"
+        in output
+    )
+    assert "Observed state-action coverage: 2.00%" in output
+    assert "Exact evaluation/training transition overlap: 100.00%" in output
+
+    assert main(["validate", "--config", str(config_path), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["schema_version"] == 1
+    assert (result["train_rows"], result["eval_rows"]) == (8, 4)
+    assert result["training_diagnostics"]["observed_state_action_pairs"] == 8
+    assert result["evaluation_split_diagnostics"]["exact_training_overlap_rows"] == 4
+    assert not Path(config.output.directory).exists()
+
+
 @pytest.mark.parametrize("existing_run", [False, True])
 def test_divergence_preserves_published_artifacts(
     tmp_path, monkeypatch, capsys, existing_run
