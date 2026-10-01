@@ -49,7 +49,9 @@ without hand-assembling metrics.
   inflated values for actions not supported by the logged data.
 - **Fail-fast data boundary.** Schema, numeric types, finite rewards, state/action
   ranges, terminal values, and challenge/solution row alignment are checked before
-  optimization.
+  optimization. Duplicate required CSV headers are rejected before parsing.
+  CSV state and action IDs are checked without floating-point rounding, so
+  fractional IDs cannot be silently accepted.
 - **Traceable outputs.** Every run stores its resolved configuration, source
   revision/working-tree state when Git is available, package and dependency
   versions, dataset SHA-256 fingerprints, model checkpoints, predictions, metrics,

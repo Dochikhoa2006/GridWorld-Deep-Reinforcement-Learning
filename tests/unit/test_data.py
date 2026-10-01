@@ -52,6 +52,63 @@ def test_load_transition_csv_has_clear_missing_file_error(tmp_path) -> None:
         load_transition_csv(missing)
 
 
+@pytest.mark.parametrize(
+    "duplicate", ["state", "action", "reward", "next_state", "done"]
+)
+def test_csv_loader_rejects_duplicate_required_headers(tmp_path, duplicate):
+    frame = valid_frame()
+    path = tmp_path / "transitions.csv"
+    frame.to_csv(path, index=False)
+    content = path.read_text()
+    path.write_text(content.replace(duplicate, f'"{duplicate}",{duplicate}', 1))
+    with pytest.raises(
+        DatasetValidationError, match=f"duplicate required column.*{duplicate}"
+    ):
+        load_transition_csv(path)
+
+
+@pytest.mark.parametrize("corrupt", ["challenge", "solution"])
+def test_evaluation_loader_rejects_duplicate_required_headers(tmp_path, corrupt):
+    solution = valid_frame()
+    challenge = solution.copy()
+    challenge["action"] = -1
+    challenge_path = tmp_path / "challenge.csv"
+    solution_path = tmp_path / "solution.csv"
+    challenge.to_csv(challenge_path, index=False)
+    solution.to_csv(solution_path, index=False)
+    path = challenge_path if corrupt == "challenge" else solution_path
+    path.write_text(path.read_text().replace("state", '"state",state', 1))
+    with pytest.raises(
+        DatasetValidationError, match=r"duplicate required column.*state"
+    ):
+        load_evaluation_data(challenge_path, solution_path)
+
+
+@pytest.mark.parametrize("column", ["state", "action", "next_state"])
+def test_csv_discrete_ids_reject_fraction_hidden_by_float_rounding(tmp_path, column):
+    frame = valid_frame()
+    frame[column] = frame[column].astype(str)
+    frame.loc[0, column] = "1.0000000000000001"
+    path = tmp_path / "transitions.csv"
+    frame.to_csv(path, index=False)
+    with pytest.raises(DatasetValidationError, match="integer values"):
+        load_transition_csv(path)
+
+
+def test_evaluation_csv_rejects_rounded_fractional_action(tmp_path):
+    solution = valid_frame()
+    challenge = solution.copy()
+    challenge["action"] = -1
+    solution["action"] = solution["action"].astype(str)
+    solution.loc[0, "action"] = "1.0000000000000001"
+    challenge_path = tmp_path / "challenge.csv"
+    solution_path = tmp_path / "solution.csv"
+    challenge.to_csv(challenge_path, index=False)
+    solution.to_csv(solution_path, index=False)
+    with pytest.raises(DatasetValidationError, match="integer values"):
+        load_evaluation_data(challenge_path, solution_path)
+
+
 def test_missing_required_columns_are_reported_together() -> None:
     frame = valid_frame().drop(columns=["reward", "done"])
 

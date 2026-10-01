@@ -7,8 +7,10 @@ predict; that sentinel is accepted only by the evaluation-pair loader.
 
 from __future__ import annotations
 
+import csv
 import os
 import random
+from decimal import Decimal, InvalidOperation
 from numbers import Integral, Real
 from pathlib import Path
 from typing import Final
@@ -91,26 +93,31 @@ def _normalise_integer_column(
     maximum: int,
     extra_allowed: tuple[int, ...] = (),
 ) -> pd.Series:
-    numeric = pd.to_numeric(series, errors="coerce")
-    values = numeric.to_numpy(dtype=np.float64, na_value=np.nan)
+    values: list[Decimal | None] = []
+    for raw in series:
+        try:
+            value = Decimal(str(int(raw) if isinstance(raw, (bool, np.bool_)) else raw))
+        except (InvalidOperation, ValueError):
+            value = None
+        values.append(value if value is not None and value.is_finite() else None)
 
-    non_numeric = ~np.isfinite(values)
+    non_numeric = np.asarray([value is None for value in values])
     if non_numeric.any():
         raise DatasetValidationError(
             f"{source} column '{column}' must contain finite numeric values; "
             f"invalid row(s): {_row_preview(non_numeric)}"
         )
 
-    non_integral = values != np.floor(values)
+    non_integral = np.asarray([value != value.to_integral_value() for value in values])
     if non_integral.any():
         raise DatasetValidationError(
             f"{source} column '{column}' must contain integer values; "
             f"invalid row(s): {_row_preview(non_integral)}"
         )
 
-    in_range = (values >= minimum) & (values <= maximum)
-    for allowed in extra_allowed:
-        in_range |= values == allowed
+    in_range = np.asarray(
+        [minimum <= value <= maximum or value in extra_allowed for value in values]
+    )
     if not in_range.all():
         allowed_text = f"{minimum}..{maximum}"
         if extra_allowed:
@@ -122,7 +129,7 @@ def _normalise_integer_column(
             f"invalid row(s): {_row_preview(invalid)}"
         )
 
-    return pd.Series(values.astype(np.int64), index=series.index, name=column)
+    return pd.Series([int(value) for value in values], index=series.index, name=column)
 
 
 def _normalise_reward(series: pd.Series, *, source: str) -> pd.Series:
@@ -242,8 +249,26 @@ def _read_csv(path: str | os.PathLike[str]) -> tuple[pd.DataFrame, Path]:
         )
 
     try:
-        return pd.read_csv(dataset_path), dataset_path
-    except (pd.errors.EmptyDataError, pd.errors.ParserError, UnicodeDecodeError) as exc:
+        with dataset_path.open(encoding="utf-8-sig", newline="") as source:
+            header = next(csv.reader(source, strict=True), None)
+            if header is not None:
+                duplicates = [
+                    name for name in REQUIRED_COLUMNS if header.count(name) > 1
+                ]
+                if duplicates:
+                    raise DatasetValidationError(
+                        f"{dataset_path} has duplicate required column(s): "
+                        f"{', '.join(duplicates)}"
+                    )
+            source.seek(0)
+            frame = pd.read_csv(source, dtype={name: str for name in REQUIRED_COLUMNS})
+        return frame, dataset_path
+    except (
+        csv.Error,
+        pd.errors.EmptyDataError,
+        pd.errors.ParserError,
+        UnicodeDecodeError,
+    ) as exc:
         raise DatasetValidationError(
             f"Could not parse dataset CSV '{dataset_path}': {exc}"
         ) from exc
