@@ -148,9 +148,37 @@ def test_changed_checkpoint_aborts_output(tmp_path, monkeypatch):
     source = tmp_path / "states.csv"
     source.write_text("state\n0\n")
     hashes = iter(["before", "after"])
-    monkeypatch.setattr("gridworld_rl.inference.sha256_file", lambda _: next(hashes))
+    from gridworld_rl.reproducibility import sha256_file
+
+    def changed_checkpoint_hash(path):
+        return next(hashes) if path == checkpoint else sha256_file(path)
+
+    monkeypatch.setattr("gridworld_rl.inference.sha256_file", changed_checkpoint_hash)
     with pytest.raises(ValueError, match="changed during prediction"):
         predict_csv(checkpoint, source, tmp_path / "predictions.csv")
+    assert sorted(path.name for path in tmp_path.iterdir()) == [
+        "model.pt",
+        "states.csv",
+    ]
+
+
+def test_changed_state_csv_aborts_output(tmp_path, monkeypatch):
+    import gridworld_rl.inference as inference
+
+    checkpoint = _checkpoint(tmp_path)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n0\n")
+    original = inference._write_batch
+
+    def write_then_change(*args, **kwargs):
+        original(*args, **kwargs)
+        source.write_text("state\n1\n")
+
+    monkeypatch.setattr(inference, "_write_batch", write_then_change)
+    output = tmp_path / "predictions.csv"
+    with pytest.raises(ValueError, match="State CSV changed during prediction"):
+        predict_csv(checkpoint, source, output, batch_size=1)
+    assert not output.exists()
     assert sorted(path.name for path in tmp_path.iterdir()) == [
         "model.pt",
         "states.csv",

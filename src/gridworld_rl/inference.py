@@ -66,6 +66,7 @@ def predict_csv(
     fingerprint = sha256_file(checkpoint)
     model, _metadata = load_checkpoint(checkpoint)
     model.to(selected_device)
+    source_fingerprint = sha256_file(source)
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = None
     try:
@@ -138,6 +139,10 @@ def predict_csv(
         if sha256_file(checkpoint) != fingerprint:
             raise ValueError(
                 "Checkpoint changed during prediction; retry with a stable file."
+            )
+        if sha256_file(source) != source_fingerprint:
+            raise ValueError(
+                "State CSV changed during prediction; retry with a stable file."
             )
         os.link(temporary_path, destination)
     except (UnicodeError, csv.Error) as exc:
