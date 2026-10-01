@@ -218,6 +218,11 @@ at least one true evaluation row; actions with no true rows are excluded. An
 undefined precision or recall is recorded as zero. Benchmark summaries include
 the mean and sample standard deviation of macro F1 across seeds.
 
+For runs with multiple algorithms, `metrics.json` includes a `policy_agreement`
+matrix of identical predicted-action rates and disagreement counts on aligned
+evaluation rows. The experiment summary displays the rate matrix. This comparison
+uses no solution labels, so agreement does not imply correctness.
+
 Benchmarks also compare every algorithm pair on matching seeds. The aggregate
 JSON's `paired_comparisons` contains each seed's agreement difference, its mean,
 sample standard deviation, minimum and maximum, and seed-level win/tie/loss counts.

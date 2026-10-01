@@ -183,6 +183,25 @@ def test_step_limited_run_saves_partial_epoch_metadata(tmp_path) -> None:
     assert verify_artifacts(run_dir).valid
 
 
+def test_multi_algorithm_run_reports_policy_agreement(tmp_path) -> None:
+    config = _config(tmp_path, "two-algorithms")
+    config.training.algorithms = ["dqn", "cql"]
+    run_dir = run_experiment(config)
+    metrics = json.loads((run_dir / "metrics.json").read_text())
+    predictions = json.loads((run_dir / "predictions.json").read_text())["predictions"]
+    comparison = metrics["policy_agreement"]
+    assert comparison["algorithms"] == ["dqn", "cql"]
+    assert comparison["num_examples"] == 4
+    differences = sum(
+        first != second
+        for first, second in zip(predictions["dqn"], predictions["cql"], strict=True)
+    )
+    assert comparison["disagreements"] == [[0, differences], [differences, 0]]
+    assert comparison["agreement"][0][1] == (4 - differences) / 4
+    assert "Agreement between algorithms" in (run_dir / "summary.md").read_text()
+    assert verify_artifacts(run_dir).valid
+
+
 @pytest.mark.parametrize("stage", ["after_load", "before_publish"])
 def test_run_refuses_dataset_changes_and_cleans_staging(tmp_path, monkeypatch, stage):
     import gridworld_rl.trainer as trainer

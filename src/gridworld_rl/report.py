@@ -247,6 +247,26 @@ def generate_report(run_dir: str | Path) -> list[Path]:
                     f"| {DISPLAY_NAMES.get(algorithm, algorithm)} "
                     f"| {SLICE_NAMES[name]} | {result['rows']} | {formatted} |"
                 )
+    policy_agreement = metrics.get("policy_agreement")
+    if policy_agreement and len(policy_agreement["algorithms"]) > 1:
+        compared = policy_agreement["algorithms"]
+        headings = " | ".join(DISPLAY_NAMES.get(name, name) for name in compared)
+        lines.extend(
+            [
+                "",
+                "## Agreement between algorithms",
+                "",
+                "Cells show the fraction of evaluation rows with identical predicted "
+                "actions. This comparison does not use solution labels; disagreement "
+                "counts are saved in `metrics.json`.",
+                "",
+                f"| Algorithm | {headings} |",
+                f"|---|{'---:|' * len(compared)}",
+            ]
+        )
+        for name, row in zip(compared, policy_agreement["agreement"], strict=True):
+            values = " | ".join(f"{100 * value:.2f}%" for value in row)
+            lines.append(f"| {DISPLAY_NAMES.get(name, name)} | {values} |")
     lines.extend(
         [
             "",

@@ -9,8 +9,43 @@ from torch import nn
 from gridworld_rl.evaluation import (
     classification_metrics,
     overlap_sliced_agreement,
+    policy_agreement_matrix,
     predict_actions,
 )
+
+
+def test_policy_agreement_matrix_is_symmetric_and_label_free():
+    result = policy_agreement_matrix(
+        {
+            "dqn": [0, 1, 2, 3],
+            "cql": [0, 2, 2, 1],
+            "double_dqn": [1, 1, 2, 3],
+        },
+        num_actions=4,
+    )
+    assert result == {
+        "algorithms": ["dqn", "cql", "double_dqn"],
+        "num_examples": 4,
+        "agreement": [[1.0, 0.5, 0.75], [0.5, 1.0, 0.25], [0.75, 0.25, 1.0]],
+        "disagreements": [[0, 2, 1], [2, 0, 3], [1, 3, 0]],
+    }
+
+
+@pytest.mark.parametrize(
+    "predictions",
+    [
+        {},
+        {"dqn": []},
+        {"dqn": [0, 1], "cql": [0]},
+        {"dqn": [0.0]},
+        {"dqn": [True]},
+        {"dqn": [-1]},
+        {"dqn": [4]},
+    ],
+)
+def test_policy_agreement_rejects_invalid_predictions(predictions):
+    with pytest.raises(ValueError):
+        policy_agreement_matrix(predictions, num_actions=4)
 
 
 def test_overlap_slices_partition_rows_and_weight_agreement():

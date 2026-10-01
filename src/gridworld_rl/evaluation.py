@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -134,6 +135,54 @@ def classification_metrics(
         "per_action_prediction_count": {
             str(action): int(prediction_count[action]) for action in range(num_actions)
         },
+    }
+
+
+def policy_agreement_matrix(
+    predictions: Mapping[str, Sequence[int] | np.ndarray], *, num_actions: int
+) -> dict[str, Any]:
+    """Compare algorithms on aligned rows without consulting target actions."""
+
+    if not predictions:
+        raise ValueError("Policy agreement requires at least one algorithm.")
+    if (
+        isinstance(num_actions, bool)
+        or not isinstance(num_actions, int)
+        or num_actions <= 1
+    ):
+        raise ValueError("num_actions must be an integer greater than 1.")
+    algorithms = list(predictions)
+    if any(not isinstance(name, str) or not name for name in algorithms):
+        raise ValueError("Policy agreement algorithm names must be non-empty strings.")
+    arrays = []
+    for name, values in predictions.items():
+        actions = np.asarray(values)
+        if (
+            actions.ndim != 1
+            or not len(actions)
+            or actions.dtype.kind not in "iu"
+            or ((actions < 0) | (actions >= num_actions)).any()
+        ):
+            raise ValueError(f"Invalid policy predictions for {name}.")
+        arrays.append(actions)
+    num_examples = len(arrays[0])
+    if any(len(actions) != num_examples for actions in arrays[1:]):
+        raise ValueError("Policy predictions must have aligned row counts.")
+
+    size = len(algorithms)
+    agreement = [[1.0] * size for _ in range(size)]
+    disagreements = [[0] * size for _ in range(size)]
+    for first in range(size):
+        for second in range(first + 1, size):
+            count = int(np.count_nonzero(arrays[first] != arrays[second]))
+            disagreements[first][second] = disagreements[second][first] = count
+            rate = (num_examples - count) / num_examples
+            agreement[first][second] = agreement[second][first] = rate
+    return {
+        "algorithms": algorithms,
+        "num_examples": num_examples,
+        "agreement": agreement,
+        "disagreements": disagreements,
     }
 
 

@@ -30,6 +30,7 @@ from .data import (
 from .evaluation import (
     classification_metrics,
     overlap_sliced_agreement,
+    policy_agreement_matrix,
     predict_actions,
 )
 from .models import QNetwork
@@ -409,6 +410,9 @@ def run_experiment(config: ExperimentConfig) -> Path:
             }
             predictions_payload[algorithm] = predictions.tolist()
 
+        metrics["policy_agreement"] = policy_agreement_matrix(
+            predictions_payload, num_actions=config.dataset.num_actions
+        )
         _write_json(staging_dir / "metrics.json", metrics)
         _write_json(
             staging_dir / "predictions.json",
