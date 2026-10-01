@@ -55,7 +55,8 @@ without hand-assembling metrics.
 - **Traceable outputs.** Every run stores its resolved configuration, source
   revision/working-tree state when Git is available, package and dependency
   versions, dataset SHA-256 fingerprints, model checkpoints, predictions, metrics,
-  figures, and an integrity manifest.
+  figures, and an integrity manifest. Dataset fingerprints are checked before and
+  after loading and again before publication; changed inputs abort the run.
 - **Coverage diagnostics.** Logged state/action coverage, per-action counts, terminal
   fraction, and reward statistics make dataset imbalance visible beside model
   metrics.

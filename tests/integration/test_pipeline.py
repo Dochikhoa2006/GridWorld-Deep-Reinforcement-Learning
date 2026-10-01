@@ -183,6 +183,38 @@ def test_step_limited_run_saves_partial_epoch_metadata(tmp_path) -> None:
     assert verify_artifacts(run_dir).valid
 
 
+@pytest.mark.parametrize("stage", ["after_load", "before_publish"])
+def test_run_refuses_dataset_changes_and_cleans_staging(tmp_path, monkeypatch, stage):
+    import gridworld_rl.trainer as trainer
+
+    config = _config(tmp_path, "changing")
+    train_path = Path(config.dataset.train)
+
+    if stage == "after_load":
+        original = trainer.load_transition_csv
+
+        def load_then_change(*args, **kwargs):
+            frame = original(*args, **kwargs)
+            train_path.write_bytes(train_path.read_bytes() + b"\n")
+            return frame
+
+        monkeypatch.setattr(trainer, "load_transition_csv", load_then_change)
+    else:
+        original = trainer.generate_report
+
+        def report_then_change(directory):
+            files = original(directory)
+            train_path.write_bytes(train_path.read_bytes() + b"\n")
+            return files
+
+        monkeypatch.setattr(trainer, "generate_report", report_then_change)
+
+    with pytest.raises(RuntimeError, match=r"Dataset file.*changed.*train"):
+        run_experiment(config)
+    assert not (Path(config.output.directory) / config.output.run_name).exists()
+    assert not list(Path(config.output.directory).glob(".changing.in-progress-*"))
+
+
 def test_seeded_runs_produce_identical_histories_and_predictions(tmp_path) -> None:
     first_dir = run_experiment(_config(tmp_path, "first"))
     second_dir = run_experiment(_config(tmp_path, "second"))

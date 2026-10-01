@@ -266,6 +266,29 @@ def _write_json(path: Path, value: Any) -> None:
     )
 
 
+def _dataset_fingerprints(config: ExperimentConfig) -> dict[str, str]:
+    paths = {
+        "train": Path(config.dataset.train).expanduser(),
+        "eval_challenge": Path(config.dataset.eval_challenge).expanduser(),
+        "eval_solution": Path(config.dataset.eval_solution).expanduser(),
+    }
+    for path in paths.values():
+        if not Path(path).is_file():
+            raise FileNotFoundError(f"Dataset file not found: {path}")
+    return {name: sha256_file(path) for name, path in paths.items()}
+
+
+def _require_stable_datasets(
+    config: ExperimentConfig, expected: dict[str, str]
+) -> None:
+    current = _dataset_fingerprints(config)
+    changed = [name for name in expected if current[name] != expected[name]]
+    if changed:
+        raise RuntimeError(
+            "Dataset file(s) changed during the run: " + ", ".join(changed)
+        )
+
+
 def run_experiment(config: ExperimentConfig) -> Path:
     """Validate data, train configured algorithms, and save all artifacts."""
 
@@ -290,6 +313,7 @@ def run_experiment(config: ExperimentConfig) -> Path:
     checkpoints_dir.mkdir()
 
     try:
+        dataset_sha256 = _dataset_fingerprints(config)
         train_frame = load_transition_csv(
             config.dataset.train,
             num_states=config.dataset.num_states,
@@ -301,6 +325,7 @@ def run_experiment(config: ExperimentConfig) -> Path:
             num_states=config.dataset.num_states,
             num_actions=config.dataset.num_actions,
         )
+        _require_stable_datasets(config, dataset_sha256)
         dataset = TransitionDataset(
             train_frame,
             source=config.dataset.train,
@@ -336,11 +361,7 @@ def run_experiment(config: ExperimentConfig) -> Path:
                     num_states=config.dataset.num_states,
                     num_actions=config.dataset.num_actions,
                 ),
-                "sha256": {
-                    "train": sha256_file(config.dataset.train),
-                    "eval_challenge": sha256_file(config.dataset.eval_challenge),
-                    "eval_solution": sha256_file(config.dataset.eval_solution),
-                },
+                "sha256": dataset_sha256,
             },
             "algorithms": {},
         }
@@ -400,6 +421,7 @@ def run_experiment(config: ExperimentConfig) -> Path:
             },
         )
         generate_report(staging_dir)
+        _require_stable_datasets(config, dataset_sha256)
         _publish_run_directory(
             staging_dir,
             run_dir,
