@@ -456,7 +456,9 @@ gridworld-rl predict \
 
 The output keeps input row order and duplicates, with `state`, greedy `action`,
 `action_gap`, and one `q_<action>` column per action. State IDs must fall within
-the checkpoint's configured state range. Predictions use the lowest action index
+the checkpoint's configured state range. Add `--compact` to omit the Q-value
+columns when only actions and gaps are needed.
+Predictions use the lowest action index
 when Q-values tie. The output is written as a new file; an existing destination
 is never replaced. Input rows are validated and processed in batches, so the
 entire CSV need not be held in memory. `--batch-size` and `--device` control

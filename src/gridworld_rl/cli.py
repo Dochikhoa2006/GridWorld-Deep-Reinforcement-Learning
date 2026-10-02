@@ -119,6 +119,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
     )
     predict.add_argument("--batch-size", type=int, default=1024)
+    predict.add_argument(
+        "--compact", action="store_true", help="omit per-action Q-value columns"
+    )
     return parser
 
 
@@ -374,6 +377,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.output,
                 device=args.device,
                 batch_size=args.batch_size,
+                compact=args.compact,
             )
             print(f"Predictions exported: {output.resolve()}")
         elif args.command == "verify":

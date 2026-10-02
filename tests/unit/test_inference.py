@@ -66,6 +66,48 @@ def test_prediction_preserves_input_order_and_duplicates(tmp_path, batch_size):
     assert list(output.parent.iterdir()) == [output]
 
 
+@pytest.mark.parametrize("batch_size", [1, 2, 20])
+def test_compact_prediction_keeps_actions_and_gaps(tmp_path, batch_size):
+    checkpoint = _checkpoint(tmp_path)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n4\n0\n2\n4\n1\n3\n")
+    output = tmp_path / "compact.csv"
+    predict_csv(checkpoint, source, output, batch_size=batch_size, compact=True)
+    with output.open(newline="") as file:
+        reader = csv.DictReader(file)
+        rows = list(reader)
+        assert reader.fieldnames == ["state", "action", "action_gap"]
+    assert [int(row["state"]) for row in rows] == [4, 0, 2, 4, 1, 3]
+    assert [int(row["action"]) for row in rows] == [2, 0, 0, 2, 1, 0]
+    assert [float(row["action_gap"]) for row in rows] == [3, 2, 0, 3, 4, 0]
+
+
+def test_cli_compact_prediction(tmp_path):
+    checkpoint = _checkpoint(tmp_path)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n1\n")
+    output = tmp_path / "compact.csv"
+    assert (
+        main(
+            [
+                "predict",
+                "--checkpoint",
+                str(checkpoint),
+                "--input",
+                str(source),
+                "--output",
+                str(output),
+                "--compact",
+            ]
+        )
+        == 0
+    )
+    assert output.read_text().splitlines() == [
+        "state,action,action_gap",
+        "1,1,4.0",
+    ]
+
+
 def test_cli_predict_and_no_clobber(tmp_path, capsys):
     checkpoint = _checkpoint(tmp_path)
     source = tmp_path / "states.csv"

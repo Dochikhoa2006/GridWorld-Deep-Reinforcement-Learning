@@ -21,6 +21,7 @@ def _write_batch(
     *,
     start: int,
     device: torch.device,
+    compact: bool = False,
 ) -> None:
     batch = torch.tensor(states, dtype=torch.long, device=device)
     with torch.inference_mode():
@@ -30,14 +31,16 @@ def _write_batch(
                 f"Checkpoint produces non-finite Q-values at input rows "
                 f"{start}..{start + len(batch) - 1}."
             )
-        values = q_values.cpu().tolist()
+        values = q_values.cpu().tolist() if not compact else None
         best = q_values.topk(2, dim=1).values.cpu().double()
         gaps = (best[:, 0] - best[:, 1]).tolist()
         actions = q_values.argmax(dim=1).cpu().tolist()
-    for state, action, gap, values_row in zip(
-        states, actions, gaps, values, strict=True
+    for index, (state, action, gap) in enumerate(
+        zip(states, actions, gaps, strict=True)
     ):
-        writer.writerow([state, action, gap, *values_row])
+        writer.writerow(
+            [state, action, gap] + ([] if values is None else values[index])
+        )
 
 
 def predict_csv(
@@ -47,6 +50,7 @@ def predict_csv(
     *,
     device: str = "cpu",
     batch_size: int = 1024,
+    compact: bool = False,
 ) -> Path:
     """Predict actions in input order and publish a new CSV without clobbering."""
 
@@ -86,7 +90,11 @@ def predict_csv(
             writer = csv.writer(temporary)
             writer.writerow(
                 ["state", "action", "action_gap"]
-                + [f"q_{action}" for action in range(model.num_actions)]
+                + (
+                    []
+                    if compact
+                    else [f"q_{action}" for action in range(model.num_actions)]
+                )
             )
             reader = csv.reader(input_file, strict=True)
             if next(reader, None) != ["state"]:
@@ -124,6 +132,7 @@ def predict_csv(
                         pending,
                         start=row_count - len(pending),
                         device=selected_device,
+                        compact=compact,
                     )
                     pending.clear()
             if row_count == 0:
@@ -135,6 +144,7 @@ def predict_csv(
                     pending,
                     start=row_count - len(pending),
                     device=selected_device,
+                    compact=compact,
                 )
         if sha256_file(checkpoint) != fingerprint:
             raise ValueError(
