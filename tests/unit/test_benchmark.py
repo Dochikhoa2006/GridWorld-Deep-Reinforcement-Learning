@@ -127,6 +127,59 @@ def test_action_stability_rejects_invalid_prediction_artifacts(tmp_path, corrupt
         aggregate_runs(paths, [1, 2])
 
 
+def _write_policy_agreement(path, agreement, differing):
+    metrics_path = path / "metrics.json"
+    metrics = json.loads(metrics_path.read_text())
+    metrics["policy_agreement"] = {
+        "algorithms": ["dqn", "cql"],
+        "num_examples": 4,
+        "agreement": [[1.0, agreement], [agreement, 1.0]],
+        "disagreements": [[0, differing], [differing, 0]],
+    }
+    metrics_path.write_text(json.dumps(metrics))
+
+
+def test_benchmark_aggregates_cross_algorithm_policy_agreement(tmp_path):
+    paths = _runs(tmp_path, {"dqn": [0.5, 0.5], "cql": [0.5, 0.5]}, [9, 2])
+    _write_policy_agreement(paths[0], 0.5, 2)
+    _write_policy_agreement(paths[1], 0.75, 1)
+    aggregate = aggregate_runs(paths, [9, 2])
+    comparison = aggregate["policy_agreement"]
+    assert comparison["num_examples"] == 4
+    (pair,) = comparison["pairs"]
+    assert (pair["first_algorithm"], pair["second_algorithm"]) == ("cql", "dqn")
+    assert pair["agreement"]["mean"] == 0.625
+    assert pair["disagreements"]["mean"] == 1.5
+    assert pair["per_seed"] == [
+        {"seed": 9, "agreement": 0.5, "disagreements": 2},
+        {"seed": 2, "agreement": 0.75, "disagreements": 1},
+    ]
+    generate_benchmark_report(tmp_path, aggregate)
+    report = (tmp_path / "benchmark.md").read_text()
+    assert "Agreement between algorithms across seeds" in report
+    assert "| CQL | DQN | 62.50% | 17.68% | 1.50 |" in report
+
+
+@pytest.mark.parametrize("damage", ["missing", "asymmetric", "count", "rows"])
+def test_benchmark_rejects_inconsistent_policy_agreement(tmp_path, damage):
+    paths = _runs(tmp_path, {"dqn": [0.5, 0.5], "cql": [0.5, 0.5]}, [1, 2])
+    _write_policy_agreement(paths[0], 0.5, 2)
+    if damage != "missing":
+        _write_policy_agreement(paths[1], 0.5, 2)
+        path = paths[1] / "metrics.json"
+        metrics = json.loads(path.read_text())
+        comparison = metrics["policy_agreement"]
+        if damage == "asymmetric":
+            comparison["agreement"][1][0] = 0.75
+        elif damage == "count":
+            comparison["disagreements"][0][1] = 1
+        else:
+            comparison["num_examples"] = 5
+        path.write_text(json.dumps(metrics))
+    with pytest.raises(ValueError, match="policy agreement"):
+        aggregate_runs(paths, [1, 2])
+
+
 def test_single_algorithm_and_legacy_reports(tmp_path):
     aggregate = aggregate_runs(_runs(tmp_path, {"dqn": [0.5]}, [1]), [1])
     assert aggregate["paired_comparisons"] == []

@@ -224,6 +224,9 @@ For runs with multiple algorithms, `metrics.json` includes a `policy_agreement`
 matrix of identical predicted-action rates and disagreement counts on aligned
 evaluation rows. The experiment summary displays the rate matrix. This comparison
 uses no solution labels, so agreement does not imply correctness.
+Multi-seed benchmarks summarize each algorithm pair's policy agreement rate and
+number of differing rows across matching seeds. The aggregate JSON preserves the
+per-seed values and rejects inconsistent agreement matrices.
 
 Benchmarks also compare every algorithm pair on matching seeds. The aggregate
 JSON's `paired_comparisons` contains each seed's agreement difference, its mean,

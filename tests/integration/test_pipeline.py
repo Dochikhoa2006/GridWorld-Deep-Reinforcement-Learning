@@ -399,6 +399,7 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
     aggregate = json.loads((benchmark_dir / "aggregate_metrics.json").read_text())
     assert aggregate["seeds"] == [3, 5]
     assert aggregate["num_runs"] == 2
+    assert aggregate["policy_agreement"] == {"num_examples": 4, "pairs": []}
     assert "macro_f1" in aggregate["algorithms"]["dqn"]
     assert aggregate["algorithms"]["dqn"]["overlap_slices"]["unseen_state"] == {
         "rows": 0,
@@ -456,6 +457,27 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
             output_directory=tmp_path / "benchmarks",
             name="comparison",
         )
+
+
+def test_multi_seed_benchmark_reports_cross_algorithm_policy_agreement(tmp_path):
+    config = _config(tmp_path, "unused")
+    config.training.algorithms = ["dqn", "cql"]
+    benchmark_dir = run_benchmark(
+        config,
+        seeds=[3, 5],
+        output_directory=tmp_path / "benchmarks",
+        name="policy-comparison",
+    )
+    aggregate = json.loads((benchmark_dir / "aggregate_metrics.json").read_text())
+    (pair,) = aggregate["policy_agreement"]["pairs"]
+    assert (pair["first_algorithm"], pair["second_algorithm"]) == ("cql", "dqn")
+    assert [value["seed"] for value in pair["per_seed"]] == [3, 5]
+    assert 0 <= pair["agreement"]["mean"] <= 1
+    assert (
+        "Agreement between algorithms across seeds"
+        in (benchmark_dir / "benchmark.md").read_text()
+    )
+    assert verify_artifacts(benchmark_dir).valid
 
 
 @pytest.mark.parametrize("failure", ["seed", "report", "late_destination"])

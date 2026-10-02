@@ -119,6 +119,95 @@ def _action_stability(
     return result
 
 
+def _aggregate_policy_agreement(
+    metrics: list[dict[str, Any]], algorithms: set[str], seeds: list[int]
+) -> dict[str, Any] | None:
+    matrices = [run.get("policy_agreement") for run in metrics]
+    if all(matrix is None for matrix in matrices):
+        return None  # Legacy runs did not save this diagnostic.
+    if any(not isinstance(matrix, dict) for matrix in matrices):
+        raise ValueError("Benchmark runs have inconsistent policy agreement metrics.")
+    order = matrices[0].get("algorithms")
+    if (
+        not isinstance(order, list)
+        or any(not isinstance(name, str) for name in order)
+        or set(order) != algorithms
+        or len(order) != len(algorithms)
+    ):
+        raise ValueError("Benchmark policy agreement algorithms are inconsistent.")
+    size = len(order)
+    row_counts = set()
+    for run, matrix in zip(metrics, matrices, strict=True):
+        rows = matrix.get("num_examples")
+        rates = matrix.get("agreement")
+        counts = matrix.get("disagreements")
+        if (
+            matrix.get("algorithms") != order
+            or isinstance(rows, bool)
+            or not isinstance(rows, int)
+            or rows <= 0
+            or not isinstance(rates, list)
+            or not isinstance(counts, list)
+            or len(rates) != size
+            or len(counts) != size
+            or any(not isinstance(row, list) or len(row) != size for row in rates)
+            or any(not isinstance(row, list) or len(row) != size for row in counts)
+        ):
+            raise ValueError("Invalid benchmark policy agreement matrix.")
+        row_counts.add(rows)
+        for algorithm in algorithms:
+            evaluation_rows = run["algorithms"][algorithm]["evaluation"].get(
+                "num_examples"
+            )
+            if evaluation_rows is not None and evaluation_rows != rows:
+                raise ValueError(
+                    "Benchmark policy agreement row count is inconsistent."
+                )
+        for first in range(size):
+            for second in range(size):
+                rate = rates[first][second]
+                count = counts[first][second]
+                if (
+                    isinstance(rate, bool)
+                    or not isinstance(rate, (int, float))
+                    or not math.isfinite(rate)
+                    or not 0 <= rate <= 1
+                    or isinstance(count, bool)
+                    or not isinstance(count, int)
+                    or not 0 <= count <= rows
+                    or abs(rate - (rows - count) / rows) > 1e-12
+                    or rate != rates[second][first]
+                    or count != counts[second][first]
+                    or (first == second and count != 0)
+                ):
+                    raise ValueError("Invalid benchmark policy agreement matrix.")
+    if len(row_counts) != 1:
+        raise ValueError("Benchmark policy agreement row counts are inconsistent.")
+
+    positions = {name: index for index, name in enumerate(order)}
+    pairs = []
+    for first, second in combinations(sorted(algorithms), 2):
+        i, j = positions[first], positions[second]
+        per_seed = [
+            {
+                "seed": seed,
+                "agreement": matrix["agreement"][i][j],
+                "disagreements": matrix["disagreements"][i][j],
+            }
+            for seed, matrix in zip(seeds, matrices, strict=True)
+        ]
+        pairs.append(
+            {
+                "first_algorithm": first,
+                "second_algorithm": second,
+                "agreement": _summary(item["agreement"] for item in per_seed),
+                "disagreements": _summary(item["disagreements"] for item in per_seed),
+                "per_seed": per_seed,
+            }
+        )
+    return {"num_examples": row_counts.pop(), "pairs": pairs}
+
+
 def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
     """Aggregate compatible run metrics without reading solution labels."""
 
@@ -190,6 +279,7 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
     algorithm_sets = [set(run["algorithms"]) for run in metrics]
     if any(algorithms != algorithm_sets[0] for algorithms in algorithm_sets[1:]):
         raise ValueError("Benchmark runs do not contain the same algorithms.")
+    policy_agreement = _aggregate_policy_agreement(metrics, algorithm_sets[0], seeds)
     stability = _action_stability(
         run_dirs,
         algorithm_sets[0],
@@ -344,6 +434,8 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
     }
     if stability is not None:
         aggregate["action_stability"] = stability
+    if policy_agreement is not None:
+        aggregate["policy_agreement"] = policy_agreement
     return aggregate
 
 
@@ -516,6 +608,30 @@ def generate_benchmark_report(
                 f"| {100 * difference['minimum']:+.2f} "
                 f"| {100 * difference['maximum']:+.2f} "
                 f"| {comparison['wins']} / {comparison['ties']} / {comparison['losses']} |"
+            )
+    policy_agreement = aggregate.get("policy_agreement")
+    if policy_agreement and policy_agreement["pairs"]:
+        lines.extend(
+            [
+                "",
+                "## Agreement between algorithms across seeds",
+                "",
+                "Each algorithm pair is compared within the same seed on aligned "
+                "evaluation rows. These action agreements do not use solution labels.",
+                "",
+                "| First | Second | Mean agreement | Sample std | Mean differing rows |",
+                "|---|---|---:|---:|---:|",
+            ]
+        )
+        for pair in policy_agreement["pairs"]:
+            first, second = pair["first_algorithm"], pair["second_algorithm"]
+            agreement = pair["agreement"]
+            lines.append(
+                f"| {DISPLAY_NAMES.get(first, first)} "
+                f"| {DISPLAY_NAMES.get(second, second)} "
+                f"| {100 * agreement['mean']:.2f}% "
+                f"| {100 * agreement['std']:.2f}% "
+                f"| {pair['disagreements']['mean']:.2f} |"
             )
     stability = aggregate.get("action_stability")
     if stability and all(
