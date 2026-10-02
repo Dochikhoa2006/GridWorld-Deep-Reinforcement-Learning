@@ -493,6 +493,18 @@ so inside a benchmark can invalidate the benchmark's original manifest.
 
 See [Architecture](docs/ARCHITECTURE.md) for component and data-flow details.
 
+### Inspect a checkpoint
+
+```bash
+gridworld-rl inspect-checkpoint \
+  --checkpoint artifacts/smoke-seed-42/checkpoints/dqn.pt \
+  --json
+```
+
+Inspection validates the checkpoint and reports its algorithm, dimensions, hidden
+layers, parameter count, seed, optimizer steps, and SHA-256 fingerprint. Omit
+`--json` for readable text. It does not run inference or create output files.
+
 ### Export a trained policy
 
 Inspect every discrete state without training again or supplying evaluation data:

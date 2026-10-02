@@ -13,7 +13,16 @@ from . import __version__
 from .config import SUPPORTED_ALGORITHMS, ExperimentConfig
 
 COMMANDS = frozenset(
-    {"train", "report", "benchmark", "validate", "verify", "export-policy", "predict"}
+    {
+        "train",
+        "report",
+        "benchmark",
+        "validate",
+        "verify",
+        "inspect-checkpoint",
+        "export-policy",
+        "predict",
+    }
 )
 ROOT_ONLY_OPTIONS = frozenset({"-h", "--help", "--version"})
 
@@ -86,6 +95,11 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument(
         "--json", action="store_true", help="print one JSON result to stdout"
     )
+    inspect = subparsers.add_parser(
+        "inspect-checkpoint", help="validate and summarize a saved model checkpoint"
+    )
+    inspect.add_argument("--checkpoint", required=True, help="saved model checkpoint")
+    inspect.add_argument("--json", action="store_true", help="print metadata as JSON")
     export = subparsers.add_parser(
         "export-policy", help="export Q-values and greedy actions for every state"
     )
@@ -333,6 +347,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                 batch_size=args.batch_size,
             )
             print(f"Policy exported: {output.resolve()}")
+        elif args.command == "inspect-checkpoint":
+            from .checkpoints import inspect_checkpoint
+
+            details = inspect_checkpoint(args.checkpoint)
+            if args.json:
+                print(json.dumps(details, sort_keys=True))
+            else:
+                print(f"Algorithm: {details['algorithm']}")
+                print(
+                    f"Network: {details['num_states']} states, "
+                    f"{details['num_actions']} actions, "
+                    f"hidden layers {details['hidden_sizes']}"
+                )
+                print(f"Parameters: {details['parameter_count']:,}")
+                print(
+                    f"Seed: {details['seed']}; optimizer steps: {details['global_steps']}"
+                )
+                print(f"SHA-256: {details['checkpoint_sha256']}")
         elif args.command == "predict":
             from .inference import predict_csv
 

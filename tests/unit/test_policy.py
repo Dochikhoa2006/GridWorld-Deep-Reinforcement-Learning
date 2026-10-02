@@ -5,7 +5,7 @@ import json
 import pytest
 import torch
 
-from gridworld_rl.checkpoints import load_checkpoint
+from gridworld_rl.checkpoints import inspect_checkpoint, load_checkpoint
 from gridworld_rl.cli import main
 from gridworld_rl.models import QNetwork
 from gridworld_rl.policy import export_policy
@@ -68,6 +68,54 @@ def test_cli_export_and_existing_output_protection(tmp_path, capsys):
         main(args)
     assert exc.value.code == 2
     assert output.read_bytes() == original
+
+
+def test_cli_inspect_checkpoint_text_and_json(tmp_path, capsys):
+    checkpoint, payload = _checkpoint(tmp_path)
+    payload["seed"] = 7
+    payload["global_steps"] = 12
+    torch.save(payload, checkpoint)
+    argv = ["inspect-checkpoint", "--checkpoint", str(checkpoint)]
+    assert main(argv) == 0
+    text = capsys.readouterr().out
+    assert "Algorithm: dqn" in text
+    assert "Parameters: 48" in text
+    assert "Seed: 7; optimizer steps: 12" in text
+
+    assert main([*argv, "--json"]) == 0
+    details = json.loads(capsys.readouterr().out)
+    assert details == {
+        "schema_version": 1,
+        "checkpoint_sha256": sha256_file(checkpoint),
+        "format_version": 1,
+        "algorithm": "dqn",
+        "num_states": 5,
+        "num_actions": 3,
+        "hidden_sizes": [5],
+        "parameter_count": 48,
+        "seed": 7,
+        "global_steps": 12,
+    }
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["model.pt"]
+
+
+@pytest.mark.parametrize("field", ["seed", "global_steps"])
+def test_inspect_rejects_invalid_optional_training_metadata(tmp_path, field):
+    checkpoint, payload = _checkpoint(tmp_path)
+    payload[field] = True
+    torch.save(payload, checkpoint)
+    with pytest.raises(ValueError, match=field):
+        inspect_checkpoint(checkpoint)
+
+
+def test_inspect_rejects_checkpoint_changed_during_read(tmp_path, monkeypatch):
+    checkpoint, _ = _checkpoint(tmp_path)
+    fingerprints = iter(["before", "after"])
+    monkeypatch.setattr(
+        "gridworld_rl.checkpoints.sha256_file", lambda _: next(fingerprints)
+    )
+    with pytest.raises(ValueError, match="changed during inspection"):
+        inspect_checkpoint(checkpoint)
 
 
 @pytest.mark.parametrize("batch_size", [0, -1, True, 1.5])

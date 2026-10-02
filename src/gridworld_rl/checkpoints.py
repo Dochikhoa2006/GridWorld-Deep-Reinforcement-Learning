@@ -10,6 +10,7 @@ import torch
 
 from .config import SUPPORTED_ALGORITHMS
 from .models import QNetwork
+from .reproducibility import sha256_file
 
 
 def load_checkpoint(
@@ -92,3 +93,35 @@ def load_checkpoint(
     model.to(device)
     model.eval()
     return model, payload
+
+
+def inspect_checkpoint(path: str | Path) -> dict[str, Any]:
+    """Validate a checkpoint and return a small, stable metadata summary."""
+
+    checkpoint_path = Path(path)
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_path}")
+    fingerprint = sha256_file(checkpoint_path)
+    model, payload = load_checkpoint(checkpoint_path)
+    if sha256_file(checkpoint_path) != fingerprint:
+        raise ValueError(
+            "Checkpoint changed during inspection; retry with a stable file."
+        )
+    for field in ("seed", "global_steps"):
+        value = payload.get(field)
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+        ):
+            raise ValueError(f"Checkpoint {field} must be a non-negative integer.")
+    return {
+        "schema_version": 1,
+        "checkpoint_sha256": fingerprint,
+        "format_version": payload.get("format_version", 1),
+        "algorithm": payload["algorithm"],
+        "num_states": model.num_states,
+        "num_actions": model.num_actions,
+        "hidden_sizes": list(payload["network"]["hidden_sizes"]),
+        "parameter_count": sum(parameter.numel() for parameter in model.parameters()),
+        "seed": payload.get("seed"),
+        "global_steps": payload.get("global_steps"),
+    }
