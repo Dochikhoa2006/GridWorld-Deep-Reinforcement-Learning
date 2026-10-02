@@ -169,6 +169,22 @@ def test_report_refresh_refuses_damaged_run_without_rehashing(tmp_path, damage) 
     assert {name: (run_dir / name).read_bytes() for name in report_files} == before
 
 
+def test_report_refresh_repairs_derived_files_only(tmp_path) -> None:
+    run_dir = run_experiment(_config(tmp_path))
+    checkpoint = run_dir / "checkpoints/dqn.pt"
+    original_checkpoint = checkpoint.read_bytes()
+    (run_dir / "report.png").write_bytes(b"broken image")
+    (run_dir / "confusion_matrices.png").unlink()
+    (run_dir / "summary.md").write_text("incomplete summary")
+    assert not verify_artifacts(run_dir).valid
+
+    generated = generate_report(run_dir)
+    assert all(path.is_file() and path.stat().st_size > 0 for path in generated)
+    assert verify_artifacts(run_dir).valid
+    assert checkpoint.read_bytes() == original_checkpoint
+    assert (run_dir / "summary.md").read_text().startswith("# Experiment summary")
+
+
 def test_step_limited_run_saves_partial_epoch_metadata(tmp_path) -> None:
     config = _config(tmp_path)
     config.training.max_optimizer_steps = 1

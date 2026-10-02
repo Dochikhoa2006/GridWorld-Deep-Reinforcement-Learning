@@ -27,6 +27,7 @@ SLICE_NAMES = {
     "seen_state_new_transition": "Seen state, new transition",
     "unseen_state": "Unseen state",
 }
+DERIVED_REPORT_FILES = frozenset({"report.png", "confusion_matrices.png", "summary.md"})
 
 
 def _load_metrics(run_dir: str | Path) -> tuple[Path, dict[str, Any]]:
@@ -52,11 +53,19 @@ def generate_report(run_dir: str | Path) -> list[Path]:
     manifest_path = directory / "manifest.json"
     if manifest_path.exists() or manifest_path.is_symlink():
         verification = verify_artifacts(directory)
-        if not verification.valid:
+        blocked = {
+            category: tuple(
+                name
+                for name in getattr(verification, category)
+                if name not in DERIVED_REPORT_FILES
+            )
+            for category in ("missing", "modified", "unexpected")
+        }
+        if any(blocked.values()):
             raise ValueError(
                 "Cannot refresh a run with invalid artifact integrity: "
-                f"missing={verification.missing}, modified={verification.modified}, "
-                f"unexpected={verification.unexpected}."
+                f"missing={blocked['missing']}, modified={blocked['modified']}, "
+                f"unexpected={blocked['unexpected']}."
             )
     algorithms = list(metrics["algorithms"])
     names = [DISPLAY_NAMES.get(name, name) for name in algorithms]
