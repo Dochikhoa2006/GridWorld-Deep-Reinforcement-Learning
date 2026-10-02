@@ -348,6 +348,8 @@ specification. Major controls include:
 
 The CLI exposes common single-run overrides; edit or copy the JSON config for a fully
 versioned experiment definition. Unknown fields and invalid ranges are rejected.
+Duplicate JSON keys and non-standard values such as `NaN` are rejected before
+training, including inside nested sections.
 
 To use an effective batch of 512 transitions while processing 128 at a time:
 

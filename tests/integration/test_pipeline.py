@@ -82,6 +82,29 @@ def test_config_rejects_invalid_hyperparameters_and_unknown_fields() -> None:
             ExperimentConfig.from_dict({"training": {field: float("inf")}})
 
 
+@pytest.mark.parametrize(
+    "content,message",
+    [
+        (
+            '{"training": {"epochs": 2, "epochs": 3}}',
+            "Duplicate configuration key: epochs",
+        ),
+        ('{"training": {}, "training": {}}', "Duplicate configuration key: training"),
+        ('{"training": {"learning_rate": NaN}}', "Non-standard JSON value"),
+        ('{"training": {"learning_rate": Infinity}}', "Non-standard JSON value"),
+    ],
+)
+def test_cli_rejects_ambiguous_or_nonstandard_config_json(
+    tmp_path, capsys, content, message
+) -> None:
+    path = tmp_path / "config.json"
+    path.write_text(content)
+    with pytest.raises(SystemExit) as exc:
+        main(["validate", "--config", str(path)])
+    assert exc.value.code == 2
+    assert message in capsys.readouterr().err
+
+
 def test_end_to_end_run_writes_loadable_reproducible_artifacts(tmp_path) -> None:
     config = _config(tmp_path)
     run_dir = run_experiment(config)

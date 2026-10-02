@@ -11,6 +11,19 @@ from typing import Any
 SUPPORTED_ALGORITHMS = ("dqn", "double_dqn", "expected_sarsa", "cql")
 
 
+def _unique_config_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in values:
+            raise ValueError(f"Duplicate configuration key: {key}")
+        values[key] = value
+    return values
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"Non-standard JSON value in configuration: {value}")
+
+
 @dataclass
 class DatasetConfig:
     train: str = "Gridworld-10_Dataset/train.csv"
@@ -85,8 +98,12 @@ class ExperimentConfig:
         if not config_path.is_file():
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
         try:
-            values = json.loads(config_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
+            values = json.loads(
+                config_path.read_text(encoding="utf-8"),
+                object_pairs_hook=_unique_config_object,
+                parse_constant=_reject_json_constant,
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
             raise ValueError(
                 f"Invalid JSON in configuration file {config_path}: {exc}"
             ) from exc
@@ -101,7 +118,8 @@ class ExperimentConfig:
         destination = Path(path)
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(
-            json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n",
+            json.dumps(self.to_dict(), indent=2, sort_keys=True, allow_nan=False)
+            + "\n",
             encoding="utf-8",
         )
 
