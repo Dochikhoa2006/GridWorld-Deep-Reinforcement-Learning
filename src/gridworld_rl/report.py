@@ -207,6 +207,30 @@ def generate_report(run_dir: str | Path) -> list[Path]:
             f"| {100 * evaluation['accuracy']:.2f}% "
             f"| {macro_value}{recall_values} |"
         )
+    if all(
+        {"mean_gradient_norm", "clipped_fraction"}
+        <= metrics["algorithms"][algorithm].get("training_history", {}).keys()
+        for algorithm in algorithms
+    ):
+        lines.extend(
+            [
+                "",
+                "## Gradient clipping",
+                "",
+                "Values summarize optimizer updates in the final recorded epoch, "
+                "which may be partial. Norms are measured before clipping.",
+                "",
+                "| Algorithm | Mean gradient norm | Updates clipped |",
+                "|---|---:|---:|",
+            ]
+        )
+        for algorithm in algorithms:
+            history = metrics["algorithms"][algorithm]["training_history"]
+            lines.append(
+                f"| {DISPLAY_NAMES.get(algorithm, algorithm)} "
+                f"| {history['mean_gradient_norm'][-1]:.4f} "
+                f"| {100 * history['clipped_fraction'][-1]:.2f}% |"
+            )
     if has_f1:
         lines.extend(
             [

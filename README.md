@@ -369,6 +369,10 @@ end of each epoch. Gradient clipping, `global_steps`, and target-network updates
 operate on optimizer updates. Epoch losses are averages over transitions, so a
 short final minibatch is weighted correctly. The default of 1 keeps one optimizer
 update per minibatch.
+`training_history.mean_gradient_norm` records the average pre-clipping norm
+per optimizer update in each epoch, and `training_history.clipped_fraction`
+records the share of updates whose norm exceeded the configured limit. The
+experiment summary displays both values for the final recorded epoch.
 
 To cap training work, pass `--max-optimizer-steps 1000` to `train` or
 `benchmark`. The cap counts optimizer updates after gradient accumulation. If it

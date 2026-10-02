@@ -136,6 +136,8 @@ def train_model(
         "cql_loss": [],
         "total_loss": [],
         "learning_rate": [],
+        "mean_gradient_norm": [],
+        "clipped_fraction": [],
     }
     global_step = 0
     target_syncs = 1
@@ -145,6 +147,8 @@ def train_model(
     model.train()
     for _epoch in range(config.training.epochs):
         epoch_metrics: list[tuple[int, dict[str, float]]] = []
+        gradient_norms: list[float] = []
+        clipped_updates = 0
         processed_batches = 0
         optimizer.zero_grad(set_to_none=True)
         for batch_index, batch in enumerate(loader):
@@ -210,7 +214,7 @@ def train_model(
                 loader
             ):
                 try:
-                    nn.utils.clip_grad_norm_(
+                    gradient_norm = nn.utils.clip_grad_norm_(
                         model.parameters(),
                         config.training.gradient_clip_norm,
                         error_if_nonfinite=True,
@@ -219,6 +223,9 @@ def train_model(
                     raise RuntimeError(
                         f"Gradient clipping failed during {context}: {exc}"
                     ) from exc
+                norm = float(gradient_norm.detach().cpu())
+                gradient_norms.append(norm)
+                clipped_updates += norm > config.training.gradient_clip_norm
                 learning_rate = learning_rate_for_step(
                     config.training, global_step, total_steps
                 )
@@ -242,6 +249,8 @@ def train_model(
         for key, value in averages.items():
             history[key].append(value)
         history["learning_rate"].append(optimizer.param_groups[0]["lr"])
+        history["mean_gradient_norm"].append(sum(gradient_norms) / len(gradient_norms))
+        history["clipped_fraction"].append(clipped_updates / len(gradient_norms))
         if processed_batches == len(loader):
             completed_epochs += 1
         else:

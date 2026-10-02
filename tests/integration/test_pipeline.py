@@ -149,6 +149,11 @@ def test_end_to_end_run_writes_loadable_reproducible_artifacts(tmp_path) -> None
     assert {"git_commit", "git_dirty"} == set(metrics["source"])
     assert "state_action_coverage" in metrics["dataset"]["diagnostics"]
     summary = (run_dir / "summary.md").read_text()
+    history = metrics["algorithms"]["dqn"]["training_history"]
+    assert len(history["mean_gradient_norm"]) == len(history["total_loss"])
+    assert all(value >= 0 for value in history["mean_gradient_norm"])
+    assert all(0 <= value <= 1 for value in history["clipped_fraction"])
+    assert "Gradient clipping" in summary
     assert "| Algorithm | Agreement | Macro F1 | Recall a0" in summary
     assert "Per-action precision and F1" in summary
     assert "Agreement by training overlap" in summary
