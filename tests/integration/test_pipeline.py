@@ -130,6 +130,9 @@ def test_end_to_end_run_writes_loadable_reproducible_artifacts(tmp_path) -> None
     assert "targets" not in predictions
     assert len(predictions["predictions"]["dqn"]) == 4
     metrics = json.loads((run_dir / "metrics.json").read_text())
+    split = metrics["evaluation_split_diagnostics"]
+    assert split["state_action_overlap_rows"] == 4
+    assert split["state_action_overlap_fraction"] == 1.0
     slices = metrics["algorithms"]["dqn"]["evaluation"]["overlap_slices"]
     assert slices["exact_training_transition"]["rows"] == 4
     assert slices["seen_state_new_transition"] == {"rows": 0, "accuracy": None}
@@ -149,6 +152,9 @@ def test_end_to_end_run_writes_loadable_reproducible_artifacts(tmp_path) -> None
     assert {"git_commit", "git_dirty"} == set(metrics["source"])
     assert "state_action_coverage" in metrics["dataset"]["diagnostics"]
     summary = (run_dir / "summary.md").read_text()
+    assert (
+        "Evaluation rows with state-action pairs seen in training: `100.00%`" in summary
+    )
     history = metrics["algorithms"]["dqn"]["training_history"]
     assert len(history["mean_gradient_norm"]) == len(history["total_loss"])
     assert all(value >= 0 for value in history["mean_gradient_norm"])

@@ -169,6 +169,15 @@ def generate_report(run_dir: str | Path) -> list[Path]:
             "- Exact evaluation/training transition overlap: "
             f"`{100 * metrics['evaluation_split_diagnostics']['exact_training_overlap_fraction']:.2f}%`"
         ),
+        *(
+            [
+                "- Evaluation rows with state-action pairs seen in training: "
+                f"`{100 * metrics['evaluation_split_diagnostics']['state_action_overlap_fraction']:.2f}%`"
+            ]
+            if "state_action_overlap_fraction"
+            in metrics["evaluation_split_diagnostics"]
+            else []
+        ),
         (
             "- Unique evaluation transitions: "
             f"`{metrics['evaluation_split_diagnostics']['unique_full_transitions']}/"

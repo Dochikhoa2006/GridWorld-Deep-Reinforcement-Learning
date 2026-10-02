@@ -316,6 +316,8 @@ def test_evaluation_diagnostics_expose_overlap_ambiguity_and_references() -> Non
     assert diagnostics["duplicate_rows"] == 1
     assert diagnostics["exact_training_overlap_rows"] == 3
     assert diagnostics["exact_training_overlap_fraction"] == pytest.approx(0.75)
+    assert diagnostics["state_action_overlap_rows"] == 3
+    assert diagnostics["state_action_overlap_fraction"] == pytest.approx(0.75)
     assert diagnostics["states_with_conflicting_actions"] == 1
     assert diagnostics["training_majority"] == {
         "action": 1,
@@ -323,3 +325,30 @@ def test_evaluation_diagnostics_expose_overlap_ambiguity_and_references() -> Non
     }
     assert diagnostics["training_state_mode_accuracy"] == pytest.approx(0.5)
     assert diagnostics["evaluation_state_mode_ceiling"] == pytest.approx(0.75)
+
+
+def test_state_action_overlap_counts_new_transitions_at_seen_pairs() -> None:
+    train = pd.DataFrame(
+        {
+            "state": [0, 1],
+            "action": [0, 1],
+            "reward": [0.0, 0.0],
+            "next_state": [1, 0],
+            "done": [False, False],
+        }
+    )
+    solution = pd.DataFrame(
+        {
+            "state": [0, 0, 2],
+            "action": [0, 1, 0],
+            "reward": [1.0, 0.0, 0.0],
+            "next_state": [1, 1, 1],
+            "done": [False, False, False],
+        }
+    )
+    diagnostics = evaluation_split_diagnostics(
+        train, solution, num_states=3, num_actions=2
+    )
+    assert diagnostics["exact_training_overlap_rows"] == 0
+    assert diagnostics["state_action_overlap_rows"] == 1
+    assert diagnostics["state_action_overlap_fraction"] == pytest.approx(1 / 3)

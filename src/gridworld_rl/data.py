@@ -434,6 +434,15 @@ def evaluation_split_diagnostics(
         )
     )
     overlap_rows = sum(row in train_transitions for row in solution_rows)
+    train_state_actions = set(
+        checked_train.loc[:, ["state", "action"]].itertuples(index=False, name=None)
+    )
+    state_action_overlap_rows = sum(
+        pair in train_state_actions
+        for pair in checked_solution.loc[:, ["state", "action"]].itertuples(
+            index=False, name=None
+        )
+    )
     unique_evaluation_transitions = len(set(solution_rows))
 
     evaluation_action_counts = (
@@ -491,6 +500,10 @@ def evaluation_split_diagnostics(
         "duplicate_rows": len(checked_solution) - unique_evaluation_transitions,
         "exact_training_overlap_rows": overlap_rows,
         "exact_training_overlap_fraction": float(overlap_rows / len(checked_solution)),
+        "state_action_overlap_rows": state_action_overlap_rows,
+        "state_action_overlap_fraction": float(
+            state_action_overlap_rows / len(checked_solution)
+        ),
         "unique_states": unique_evaluation_states,
         "states_seen_in_training": len(evaluation_states & training_states),
         "states_with_conflicting_actions": conflicting_states,
