@@ -88,6 +88,33 @@ def test_every_pair_is_included_once_for_single_seed(tmp_path):
     assert pairs[1]["wins"] == 1
 
 
+@pytest.mark.parametrize(
+    "field,value,message",
+    [
+        ("recall", float("nan"), "per-action recall"),
+        ("recall", 1.2, "per-action recall"),
+        ("recall", True, "per-action recall"),
+        ("objective", float("inf"), "final training objective"),
+        ("objective", True, "final training objective"),
+        ("objective", [], "final training objective"),
+    ],
+)
+def test_rejects_invalid_recall_and_training_objective(tmp_path, field, value, message):
+    paths = _runs(tmp_path, {"dqn": [0.5, 0.5]}, [1, 2])
+    metrics_path = paths[1] / "metrics.json"
+    metrics = json.loads(metrics_path.read_text())
+    algorithm = metrics["algorithms"]["dqn"]
+    if field == "recall":
+        algorithm["evaluation"]["per_action_recall"]["0"] = value
+    else:
+        algorithm["training_history"]["total_loss"] = (
+            value if isinstance(value, list) else [value]
+        )
+    metrics_path.write_text(json.dumps(metrics))
+    with pytest.raises(ValueError, match=message):
+        aggregate_runs(paths, [1, 2])
+
+
 def test_benchmark_refuses_mixed_manifest_presence(tmp_path):
     paths = _runs(tmp_path, {"dqn": [0.5, 0.5]}, [1, 2])
     hashes = {

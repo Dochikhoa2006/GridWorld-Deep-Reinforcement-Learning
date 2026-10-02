@@ -329,6 +329,38 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
             raise ValueError(
                 f"Benchmark runs have inconsistent recall actions for {algorithm}."
             )
+        if any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or not 0 <= value <= 1
+            for evaluation in evaluations
+            for value in evaluation["per_action_recall"].values()
+        ):
+            raise ValueError(
+                f"Benchmark per-action recall must be finite and between 0 and 1 for {algorithm}."
+            )
+        objective_histories = [
+            run["algorithms"][algorithm]["training_history"]["total_loss"]
+            for run in metrics
+        ]
+        if any(
+            not isinstance(history, list) or not history
+            for history in objective_histories
+        ):
+            raise ValueError(
+                f"Benchmark final training objective is missing for {algorithm}."
+            )
+        final_objectives = [history[-1] for history in objective_histories]
+        if any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            for value in final_objectives
+        ):
+            raise ValueError(
+                f"Benchmark final training objective must be finite for {algorithm}."
+            )
         f1_values = [evaluation.get("macro_f1") for evaluation in evaluations]
         if any(value is not None for value in f1_values) and any(
             isinstance(value, bool)
@@ -391,10 +423,7 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
                 )
                 for action in recall_actions
             },
-            "final_training_objective": _summary(
-                run["algorithms"][algorithm]["training_history"]["total_loss"][-1]
-                for run in metrics
-            ),
+            "final_training_objective": _summary(final_objectives),
         }
         if f1_values[0] is not None:
             algorithms[algorithm]["macro_f1"] = _summary(f1_values)
