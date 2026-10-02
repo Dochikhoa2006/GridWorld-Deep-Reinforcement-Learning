@@ -60,12 +60,13 @@ def load_checkpoint(
         not isinstance(name, str) for name in state_dict
     ):
         raise ValueError("Checkpoint model_state_dict must map layer names to tensors.")
-    model = QNetwork(
-        num_states=payload["num_states"],
-        num_actions=payload["num_actions"],
-        hidden_sizes=hidden_sizes,
-    )
-    expected = model.state_dict()
+    expected: dict[str, tuple[int, ...]] = {}
+    input_size = payload["num_states"]
+    for layer_index, output_size in enumerate([*hidden_sizes, payload["num_actions"]]):
+        prefix = f"network.{2 * layer_index}"
+        expected[f"{prefix}.weight"] = (output_size, input_size)
+        expected[f"{prefix}.bias"] = (output_size,)
+        input_size = output_size
     missing = sorted(set(expected) - set(state_dict))
     unexpected = sorted(set(state_dict) - set(expected))
     if missing or unexpected:
@@ -73,22 +74,27 @@ def load_checkpoint(
             "Checkpoint model_state_dict layer mismatch: "
             f"missing={missing}, unexpected={unexpected}."
         )
-    for name, reference in expected.items():
+    for name, shape in expected.items():
         value = state_dict[name]
         if not isinstance(value, torch.Tensor) or value.layout != torch.strided:
             raise ValueError(
                 f"Checkpoint model_state_dict {name} must be a dense tensor."
             )
-        if value.shape != reference.shape or value.dtype != reference.dtype:
+        if tuple(value.shape) != shape or value.dtype != torch.float32:
             raise ValueError(
                 f"Checkpoint model_state_dict {name} has shape/dtype "
                 f"{tuple(value.shape)}/{value.dtype}; expected "
-                f"{tuple(reference.shape)}/{reference.dtype}."
+                f"{shape}/{torch.float32}."
             )
         if not torch.isfinite(value).all():
             raise ValueError(
                 f"Checkpoint model_state_dict {name} must contain finite tensors."
             )
+    model = QNetwork(
+        num_states=payload["num_states"],
+        num_actions=payload["num_actions"],
+        hidden_sizes=hidden_sizes,
+    )
     model.load_state_dict(state_dict)
     model.to(device)
     model.eval()

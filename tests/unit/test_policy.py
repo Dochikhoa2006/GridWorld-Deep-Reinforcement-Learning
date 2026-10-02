@@ -157,6 +157,25 @@ def test_legacy_checkpoint_without_version_loads(tmp_path):
     assert model.num_states == 5
 
 
+@pytest.mark.parametrize("field", ["num_states", "num_actions", "hidden_sizes"])
+def test_weight_shapes_checked_before_model_allocation(tmp_path, monkeypatch, field):
+    path, payload = _checkpoint(tmp_path)
+    if field == "hidden_sizes":
+        payload["network"]["hidden_sizes"] = [10**9]
+    else:
+        payload[field] = 10**9
+    torch.save(payload, path)
+
+    def unexpected_model_allocation(*args, **kwargs):
+        pytest.fail("Constructed a model from incompatible checkpoint metadata")
+
+    monkeypatch.setattr(
+        "gridworld_rl.checkpoints.QNetwork", unexpected_model_allocation
+    )
+    with pytest.raises(ValueError, match=r"model_state_dict.*shape/dtype"):
+        load_checkpoint(path)
+
+
 @pytest.mark.parametrize(
     "damage", ["missing", "unexpected", "shape", "dtype", "value", "nonfinite"]
 )
