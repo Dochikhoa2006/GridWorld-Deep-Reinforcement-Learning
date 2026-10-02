@@ -347,7 +347,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "verify":
             from .integrity import verify_artifacts
 
-            result = verify_artifacts(args.run_dir)
+            try:
+                result = verify_artifacts(args.run_dir)
+            except (OSError, ValueError, RuntimeError) as exc:
+                if not args.json:
+                    raise
+                print(
+                    json.dumps(
+                        {"schema_version": 1, "valid": False, "error": str(exc)},
+                        sort_keys=True,
+                    )
+                )
+                return 2
             if args.json:
                 print(
                     json.dumps(

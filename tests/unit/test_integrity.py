@@ -169,6 +169,23 @@ def test_missing_manifest_cli_error(tmp_path, capsys):
     assert "Artifact manifest not found" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("kind", ["missing", "invalid", "symlink"])
+def test_json_verification_errors_remain_machine_readable(tmp_path, capsys, kind):
+    manifest = tmp_path / "manifest.json"
+    if kind == "invalid":
+        manifest.write_text("{")
+    elif kind == "symlink":
+        manifest.symlink_to(tmp_path / "missing.json")
+    status = main(["verify", "--run-dir", str(tmp_path), "--json"])
+    output = capsys.readouterr()
+    assert status == 2
+    assert output.err == ""
+    payload = json.loads(output.out)
+    assert payload["schema_version"] == 1
+    assert payload["valid"] is False
+    assert isinstance(payload["error"], str) and payload["error"]
+
+
 def test_directory_does_not_substitute_for_expected_file(tmp_path):
     root = _artifact_directory(tmp_path)
     (root / "metrics.json").unlink()

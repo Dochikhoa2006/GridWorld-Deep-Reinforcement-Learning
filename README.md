@@ -470,8 +470,9 @@ gridworld-rl verify --run-dir artifacts/benchmarks/five-seed-study
 ```
 
 For CI, add `--json` to print one JSON object with `valid`, `checked_files`,
-and sorted `missing`, `modified`, and `unexpected` file lists. Exit codes remain
-`0` for intact artifacts, `1` for mismatches, and `2` for invalid manifests.
+and sorted `missing`, `modified`, and `unexpected` file lists. Invalid or unreadable
+manifests produce a JSON `error` string. Exit codes remain `0` for intact
+artifacts, `1` for mismatches, and `2` for invalid manifests.
 
 Verification checks every SHA-256 entry, including nested run manifests in a
 benchmark, and reports all missing, modified, and unexpected files. Exit status
