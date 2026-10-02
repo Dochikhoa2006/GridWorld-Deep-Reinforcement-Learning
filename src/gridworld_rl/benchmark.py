@@ -20,6 +20,7 @@ import numpy as np
 
 from .config import ExperimentConfig
 from .evaluation import EVALUATION_SLICES
+from .integrity import verify_artifacts
 from .report import DISPLAY_NAMES, SLICE_NAMES
 from .reproducibility import sha256_file
 from .trainer import run_experiment
@@ -218,6 +219,18 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
         for seed in seeds
     ) or len(set(seeds)) != len(seeds):
         raise ValueError("Benchmark seeds must be distinct non-negative integers.")
+    manifests = [run_dir / "manifest.json" for run_dir in run_dirs]
+    if any(path.exists() or path.is_symlink() for path in manifests):
+        if not all(path.is_file() and not path.is_symlink() for path in manifests):
+            raise ValueError("Benchmark runs have inconsistent integrity manifests.")
+        for run_dir in run_dirs:
+            verification = verify_artifacts(run_dir)
+            if not verification.valid:
+                raise ValueError(
+                    f"Benchmark run failed integrity verification: {run_dir}: "
+                    f"missing={verification.missing}, modified={verification.modified}, "
+                    f"unexpected={verification.unexpected}."
+                )
     metrics = [
         json.loads((run_dir / "metrics.json").read_text(encoding="utf-8"))
         for run_dir in run_dirs

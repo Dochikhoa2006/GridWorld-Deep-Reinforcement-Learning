@@ -442,14 +442,15 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
     second_metrics = json.loads(second_metrics_path.read_text())
     second_metrics["dataset"]["sha256"]["train"] = "different"
     second_metrics_path.write_text(json.dumps(second_metrics))
+    run_dirs = [benchmark_dir / "runs/seed-3", benchmark_dir / "runs/seed-5"]
+    with pytest.raises(ValueError, match="integrity verification"):
+        aggregate_runs(run_dirs, [3, 5])
+    second_manifest_path = run_dirs[1] / "manifest.json"
+    second_manifest = json.loads(second_manifest_path.read_text())
+    second_manifest["sha256"]["metrics.json"] = sha256_file(second_metrics_path)
+    second_manifest_path.write_text(json.dumps(second_manifest))
     with pytest.raises(ValueError, match="different dataset fingerprints"):
-        aggregate_runs(
-            [
-                benchmark_dir / "runs/seed-3",
-                benchmark_dir / "runs/seed-5",
-            ],
-            [3, 5],
-        )
+        aggregate_runs(run_dirs, [3, 5])
     with pytest.raises(FileExistsError, match="immutable evidence"):
         run_benchmark(
             _config(tmp_path, "unused-again"),

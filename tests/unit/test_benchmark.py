@@ -7,6 +7,7 @@ import pytest
 
 from gridworld_rl.benchmark import aggregate_runs, generate_benchmark_report
 from gridworld_rl.config import ExperimentConfig
+from gridworld_rl.reproducibility import sha256_file
 
 
 def _runs(tmp_path, scores, seeds):
@@ -85,6 +86,16 @@ def test_every_pair_is_included_once_for_single_seed(tmp_path):
     assert pairs[0]["accuracy_difference"]["mean"] == -0.25
     assert pairs[0]["losses"] == 1
     assert pairs[1]["wins"] == 1
+
+
+def test_benchmark_refuses_mixed_manifest_presence(tmp_path):
+    paths = _runs(tmp_path, {"dqn": [0.5, 0.5]}, [1, 2])
+    hashes = {
+        name: sha256_file(paths[0] / name) for name in ("config.json", "metrics.json")
+    }
+    (paths[0] / "manifest.json").write_text(json.dumps({"sha256": hashes}))
+    with pytest.raises(ValueError, match="inconsistent integrity manifests"):
+        aggregate_runs(paths, [1, 2])
 
 
 def test_action_stability_uses_aligned_rows_and_seed_pairs(tmp_path):

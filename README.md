@@ -245,6 +245,9 @@ rates. This uses saved predictions without consulting solution labels. A high ra
 means the algorithm tends to choose the same actions across seeds; it does not
 establish that those actions are correct. Aggregation checks prediction actions and
 row alignment before publishing the benchmark.
+When saved runs include integrity manifests, aggregation verifies every run before
+reading its metrics and refuses a mixture of manifested and unmanifested runs.
+Legacy run bundles without manifests remain supported.
 
 ### 6. Run the test suite
 
