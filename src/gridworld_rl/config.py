@@ -76,6 +76,8 @@ class ExperimentConfig:
 
     @classmethod
     def from_dict(cls, values: dict[str, Any]) -> ExperimentConfig:
+        if not isinstance(values, dict):
+            raise ValueError("The configuration root must be an object.")
         allowed = {"dataset", "network", "training", "output"}
         unknown = set(values) - allowed
         if unknown:
@@ -103,7 +105,7 @@ class ExperimentConfig:
                 object_pairs_hook=_unique_config_object,
                 parse_constant=_reject_json_constant,
             )
-        except (json.JSONDecodeError, ValueError) as exc:
+        except (json.JSONDecodeError, UnicodeError, ValueError) as exc:
             raise ValueError(
                 f"Invalid JSON in configuration file {config_path}: {exc}"
             ) from exc
@@ -165,9 +167,13 @@ class ExperimentConfig:
             or self.dataset.num_actions <= 1
         ):
             raise ValueError("dataset.num_actions must be greater than 1.")
-        if not self.network.hidden_sizes or any(
-            isinstance(size, bool) or not isinstance(size, int) or size <= 0
-            for size in self.network.hidden_sizes
+        if (
+            not isinstance(self.network.hidden_sizes, (list, tuple))
+            or not self.network.hidden_sizes
+            or any(
+                isinstance(size, bool) or not isinstance(size, int) or size <= 0
+                for size in self.network.hidden_sizes
+            )
         ):
             raise ValueError("network.hidden_sizes must contain positive integers.")
         if not isinstance(t.algorithms, list) or not all(
