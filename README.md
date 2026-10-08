@@ -583,6 +583,10 @@ the training CSV against the checkpoint's state and action dimensions and checks
 both input hashes again after inference. Exact logged support is a diagnostic;
 it does not establish that the action is safe or has a high return.
 
+New training runs include the same support diagnostics in each algorithm's
+`metrics.json` entry and in `summary.md`. Multi-seed benchmarks summarize both
+support rates across seeds in `aggregate_metrics.json` and `benchmark.md`.
+
 ## Repository structure
 
 ```text

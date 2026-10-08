@@ -57,7 +57,7 @@ installation rather than accidentally from the repository root.
 | `trainer.py` | Per-algorithm optimization, target synchronization, evaluation orchestration, run persistence | Cross-seed statistics |
 | `evaluation.py` | Batched greedy predictions, accuracy, confusion matrix, action recall/support | Environment rollouts |
 | `checkpoints.py` | Defensive reconstruction of a saved `QNetwork` | Untrusted arbitrary checkpoint formats |
-| `support.py` | Logged state-action support audit for a saved greedy policy | Online return or safety certification |
+| `support.py` | Logged state-action support diagnostics for trained and saved greedy policies | Online return or safety certification |
 | `report.py` | Per-run figures and Markdown generated from `metrics.json` | Model training |
 | `benchmark.py` | Repeated seeded runs, compatible-metric aggregation, mean/std report | Hyperparameter selection |
 | `reproducibility.py` | Global seeding, device resolution, SHA-256 file fingerprints | Statistical claims |

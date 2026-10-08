@@ -10,6 +10,8 @@ tagged releases.
 
 ### Added
 
+- Automatic logged policy-support diagnostics in run metrics and reports, with
+  state- and row-weighted summaries across benchmark seeds.
 - An `audit-policy-support` CLI command that measures exact logged state-action
   support for a saved greedy policy, with state- and row-weighted diagnostics.
 - A `compare-checkpoints` CLI command for label-free, full-state policy agreement

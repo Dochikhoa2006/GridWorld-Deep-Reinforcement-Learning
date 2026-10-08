@@ -228,6 +228,31 @@ def generate_report(run_dir: str | Path) -> list[Path]:
             f"| {balanced_value}{macro_value}{recall_values} |"
         )
     if all(
+        "policy_support" in metrics["algorithms"][algorithm] for algorithm in algorithms
+    ):
+        lines.extend(
+            [
+                "",
+                "## Logged action support",
+                "",
+                "A chosen action is supported when that exact state-action pair "
+                "appears in training. State rate weights observed states equally; "
+                "row rate weights them by logged frequency. Unobserved states are "
+                "excluded. Support does not establish policy quality or safety.",
+                "",
+                "| Algorithm | Supported observed states | State rate | Row rate |",
+                "|---|---:|---:|---:|",
+            ]
+        )
+        for algorithm in algorithms:
+            support = metrics["algorithms"][algorithm]["policy_support"]
+            lines.append(
+                f"| {DISPLAY_NAMES.get(algorithm, algorithm)} "
+                f"| {support['supported_observed_states']}/{support['observed_states']} "
+                f"| {100 * support['observed_state_support_rate']:.2f}% "
+                f"| {100 * support['logged_row_support_rate']:.2f}% |"
+            )
+    if all(
         {"mean_gradient_norm", "clipped_fraction"}
         <= metrics["algorithms"][algorithm].get("training_history", {}).keys()
         for algorithm in algorithms

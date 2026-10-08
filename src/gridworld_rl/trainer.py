@@ -42,6 +42,7 @@ from .reproducibility import (
     source_revision,
 )
 from .schedules import learning_rate_for_step
+from .support import policy_support_metrics
 
 
 def _mean_history(
@@ -395,6 +396,12 @@ def run_experiment(config: ExperimentConfig) -> Path:
             evaluation["overlap_slices"] = overlap_sliced_agreement(
                 train_frame, solution, eval_targets, predictions
             )
+            support = policy_support_metrics(
+                model,
+                train_frame,
+                device=device,
+                batch_size=max(config.training.batch_size, 256),
+            )
             checkpoint_path = checkpoints_dir / f"{algorithm}.pt"
             torch.save(
                 {
@@ -415,6 +422,7 @@ def run_experiment(config: ExperimentConfig) -> Path:
             metrics["algorithms"][algorithm] = {
                 **training_metrics,
                 "evaluation": evaluation,
+                "policy_support": support,
                 "checkpoint": str(checkpoint_path.relative_to(staging_dir)),
             }
             predictions_payload[algorithm] = predictions.tolist()

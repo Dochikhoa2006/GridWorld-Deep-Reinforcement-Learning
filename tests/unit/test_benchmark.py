@@ -88,6 +88,42 @@ def test_every_pair_is_included_once_for_single_seed(tmp_path):
     assert pairs[1]["wins"] == 1
 
 
+def test_policy_support_aggregates_rates_and_rejects_inconsistent_runs(tmp_path):
+    paths = _runs(tmp_path, {"dqn": [0.5, 0.75]}, [1, 2])
+    for path, supported, row_rate in zip(paths, [2, 3], [0.4, 0.8], strict=True):
+        metrics_path = path / "metrics.json"
+        metrics = json.loads(metrics_path.read_text())
+        metrics["algorithms"]["dqn"]["policy_support"] = {
+            "training_rows": 10,
+            "observed_states": 4,
+            "supported_observed_states": supported,
+            "observed_state_support_rate": supported / 4,
+            "logged_row_support_rate": row_rate,
+        }
+        metrics_path.write_text(json.dumps(metrics))
+    aggregate = aggregate_runs(paths, [1, 2])
+    support = aggregate["algorithms"]["dqn"]["policy_support"]
+    assert support["observed_states"] == 4
+    assert support["observed_state_support_rate"]["mean"] == 0.625
+    assert support["logged_row_support_rate"]["mean"] == pytest.approx(0.6)
+    generate_benchmark_report(tmp_path, aggregate)
+    assert (
+        "Logged action support across seeds" in (tmp_path / "benchmark.md").read_text()
+    )
+
+    metrics_path = paths[1] / "metrics.json"
+    metrics = json.loads(metrics_path.read_text())
+    metrics["algorithms"]["dqn"]["policy_support"]["observed_state_support_rate"] = 1.0
+    metrics_path.write_text(json.dumps(metrics))
+    with pytest.raises(ValueError, match="Invalid benchmark policy support"):
+        aggregate_runs(paths, [1, 2])
+
+    del metrics["algorithms"]["dqn"]["policy_support"]
+    metrics_path.write_text(json.dumps(metrics))
+    with pytest.raises(ValueError, match="policy support is inconsistent"):
+        aggregate_runs(paths, [1, 2])
+
+
 @pytest.mark.parametrize(
     "field,value,message",
     [

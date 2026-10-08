@@ -138,6 +138,12 @@ def test_end_to_end_run_writes_loadable_reproducible_artifacts(tmp_path) -> None
     assert slices["seen_state_new_transition"] == {"rows": 0, "accuracy": None}
     assert slices["unseen_state"] == {"rows": 0, "accuracy": None}
     evaluation = metrics["algorithms"]["dqn"]["evaluation"]
+    support = metrics["algorithms"]["dqn"]["policy_support"]
+    assert support["training_rows"] == 8
+    assert support["observed_states"] + support["unobserved_states"] == 100
+    assert 0 <= support["observed_state_support_rate"] <= 1
+    assert 0 <= support["logged_row_support_rate"] <= 1
+    assert "Logged action support" in (run_dir / "summary.md").read_text()
     assert 0 <= evaluation["macro_f1"] <= 1
     assert 0 <= evaluation["balanced_accuracy"] <= 1
     assert set(evaluation["per_action_precision"]) == {"0", "1", "2", "3"}
@@ -416,6 +422,14 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
     assert aggregate["policy_agreement"] == {"num_examples": 4, "pairs": []}
     assert "macro_f1" in aggregate["algorithms"]["dqn"]
     assert "balanced_accuracy" in aggregate["algorithms"]["dqn"]
+    assert "policy_support" in aggregate["algorithms"]["dqn"]
+    assert (
+        0
+        <= aggregate["algorithms"]["dqn"]["policy_support"][
+            "observed_state_support_rate"
+        ]["mean"]
+        <= 1
+    )
     assert aggregate["algorithms"]["dqn"]["overlap_slices"]["unseen_state"] == {
         "rows": 0,
         "accuracy": None,
@@ -444,6 +458,7 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
     assert "Macro F1 mean | Macro F1 std" in benchmark_summary
     assert "Balanced accuracy mean | Balanced accuracy std" in benchmark_summary
     assert "Action stability across seeds" in benchmark_summary
+    assert "Logged action support across seeds" in benchmark_summary
     assert "| DQN | Unseen state | 0 | N/A | N/A |" in benchmark_summary
     assert "| DQN |" in benchmark_summary
     assert "%" in benchmark_summary.split("| DQN |", maxsplit=1)[1]

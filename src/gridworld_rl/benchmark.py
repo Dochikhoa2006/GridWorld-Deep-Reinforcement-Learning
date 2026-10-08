@@ -209,6 +209,51 @@ def _aggregate_policy_agreement(
     return {"num_examples": row_counts.pop(), "pairs": pairs}
 
 
+def _aggregate_policy_support(
+    runs: list[dict[str, Any]], algorithm: str
+) -> dict[str, Any] | None:
+    values = [run["algorithms"][algorithm].get("policy_support") for run in runs]
+    if all(value is None for value in values):
+        return None  # Older runs did not save this diagnostic.
+    if any(not isinstance(value, dict) for value in values):
+        raise ValueError(f"Benchmark policy support is inconsistent for {algorithm}.")
+    observed = values[0].get("observed_states")
+    for run, value in zip(runs, values, strict=True):
+        rows = value.get("training_rows")
+        supported = value.get("supported_observed_states")
+        state_rate = value.get("observed_state_support_rate")
+        row_rate = value.get("logged_row_support_rate")
+        if (
+            any(type(number) is not int or number <= 0 for number in (rows, observed))
+            or type(supported) is not int
+            or not 0 <= supported <= observed
+            or type(value.get("observed_states")) is not int
+            or value["observed_states"] != observed
+            or (
+                run["dataset"].get("train_rows") is not None
+                and rows != run["dataset"]["train_rows"]
+            )
+            or any(
+                isinstance(rate, bool)
+                or not isinstance(rate, (int, float))
+                or not math.isfinite(rate)
+                or not 0 <= rate <= 1
+                for rate in (state_rate, row_rate)
+            )
+            or abs(state_rate - supported / observed) > 1e-12
+        ):
+            raise ValueError(f"Invalid benchmark policy support for {algorithm}.")
+    return {
+        "observed_states": observed,
+        "observed_state_support_rate": _summary(
+            value["observed_state_support_rate"] for value in values
+        ),
+        "logged_row_support_rate": _summary(
+            value["logged_row_support_rate"] for value in values
+        ),
+    }
+
+
 def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
     """Aggregate compatible run metrics without reading solution labels."""
 
@@ -454,6 +499,9 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
                 }
                 for name in EVALUATION_SLICES
             }
+        support = _aggregate_policy_support(metrics, algorithm)
+        if support is not None:
+            algorithms[algorithm]["policy_support"] = support
 
     paired_comparisons = []
     for first, second in combinations(sorted(algorithm_sets[0]), 2):
@@ -626,6 +674,33 @@ def generate_benchmark_report(
             f"| {100 * accuracy['minimum']:.2f}% "
             f"| {100 * accuracy['maximum']:.2f}%{balanced_values}{f1_values} |"
         )
+    if all(
+        "policy_support" in aggregate["algorithms"][name] for name in algorithm_names
+    ):
+        lines.extend(
+            [
+                "",
+                "## Logged action support across seeds",
+                "",
+                "State rate weights observed states equally; row rate weights "
+                "them by logged frequency. This is a coverage diagnostic, not "
+                "a policy quality or safety measure.",
+                "",
+                "| Algorithm | Observed states | State rate mean | State rate std "
+                "| Row rate mean | Row rate std |",
+                "|---|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for algorithm in algorithm_names:
+            support = aggregate["algorithms"][algorithm]["policy_support"]
+            state = support["observed_state_support_rate"]
+            row = support["logged_row_support_rate"]
+            lines.append(
+                f"| {DISPLAY_NAMES.get(algorithm, algorithm)} "
+                f"| {support['observed_states']} "
+                f"| {100 * state['mean']:.2f}% | {100 * state['std']:.2f}% "
+                f"| {100 * row['mean']:.2f}% | {100 * row['std']:.2f}% |"
+            )
     if all(
         "overlap_slices" in aggregate["algorithms"][name] for name in algorithm_names
     ):
