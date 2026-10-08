@@ -10,6 +10,8 @@ tagged releases.
 
 ### Added
 
+- An `audit-policy-support` CLI command that measures exact logged state-action
+  support for a saved greedy policy, with state- and row-weighted diagnostics.
 - A `compare-checkpoints` CLI command for label-free, full-state policy agreement
   with pairwise rates, action counts, and checkpoint fingerprints.
 

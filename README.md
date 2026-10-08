@@ -563,6 +563,26 @@ Inference runs in batches, and checkpoint hashes are checked again before result
 are printed. Agreement measures policy similarity across the configured state
 space, including unobserved states; it does not measure correctness or return.
 
+### Audit logged action support
+
+Check whether a checkpoint's greedy action at each state seen in training also
+appeared with that state in the logged transitions:
+
+```bash
+gridworld-rl audit-policy-support \
+  --checkpoint artifacts/smoke-seed-42/checkpoints/cql.pt \
+  --train Gridworld-10_Dataset/train.csv
+```
+
+The JSON includes checkpoint and training-file hashes, supported and unsupported
+observed-state counts, IDs of unsupported observed states, counts by chosen action,
+and two support rates. The state rate weights each observed state equally; the
+row rate weights it by its frequency in the training file. States never seen in
+training are counted separately and excluded from both rates. The command validates
+the training CSV against the checkpoint's state and action dimensions and checks
+both input hashes again after inference. Exact logged support is a diagnostic;
+it does not establish that the action is safe or has a high return.
+
 ## Repository structure
 
 ```text

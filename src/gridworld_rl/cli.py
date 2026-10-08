@@ -23,6 +23,7 @@ COMMANDS = frozenset(
         "export-policy",
         "predict",
         "compare-checkpoints",
+        "audit-policy-support",
     }
 )
 ROOT_ONLY_OPTIONS = frozenset({"-h", "--help", "--version"})
@@ -132,6 +133,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
     )
     compare.add_argument("--batch-size", type=int, default=1024)
+    audit = subparsers.add_parser(
+        "audit-policy-support",
+        help="check whether greedy actions at observed states occur in training data",
+    )
+    audit.add_argument("--checkpoint", required=True)
+    audit.add_argument(
+        "--train", required=True, help="validated training transition CSV"
+    )
+    audit.add_argument(
+        "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
+    )
+    audit.add_argument("--batch-size", type=int, default=1024)
     return parser
 
 
@@ -395,6 +408,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             result = compare_checkpoints(
                 args.checkpoints, device=args.device, batch_size=args.batch_size
+            )
+            print(json.dumps(result, sort_keys=True, allow_nan=False))
+        elif args.command == "audit-policy-support":
+            from .support import audit_policy_support
+
+            result = audit_policy_support(
+                args.checkpoint,
+                args.train,
+                device=args.device,
+                batch_size=args.batch_size,
             )
             print(json.dumps(result, sort_keys=True, allow_nan=False))
         elif args.command == "verify":
