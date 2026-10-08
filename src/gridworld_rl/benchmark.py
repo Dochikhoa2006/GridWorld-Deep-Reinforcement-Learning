@@ -362,6 +362,19 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
                 f"Benchmark final training objective must be finite for {algorithm}."
             )
         f1_values = [evaluation.get("macro_f1") for evaluation in evaluations]
+        balanced_values = [
+            evaluation.get("balanced_accuracy") for evaluation in evaluations
+        ]
+        if any(value is not None for value in balanced_values) and any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or not 0 <= value <= 1
+            for value in balanced_values
+        ):
+            raise ValueError(
+                f"Benchmark balanced accuracy is invalid or missing for {algorithm}."
+            )
         if any(value is not None for value in f1_values) and any(
             isinstance(value, bool)
             or not isinstance(value, (int, float))
@@ -427,6 +440,8 @@ def aggregate_runs(run_dirs: list[Path], seeds: list[int]) -> dict[str, Any]:
         }
         if f1_values[0] is not None:
             algorithms[algorithm]["macro_f1"] = _summary(f1_values)
+        if balanced_values[0] is not None:
+            algorithms[algorithm]["balanced_accuracy"] = _summary(balanced_values)
         if sliced[0] is not None:
             algorithms[algorithm]["overlap_slices"] = {
                 name: {
@@ -564,6 +579,15 @@ def generate_benchmark_report(
     has_f1 = all(
         "macro_f1" in aggregate["algorithms"][name] for name in algorithm_names
     )
+    has_balanced_accuracy = all(
+        "balanced_accuracy" in aggregate["algorithms"][name] for name in algorithm_names
+    )
+    balanced_header = (
+        " | Balanced accuracy mean | Balanced accuracy std"
+        if has_balanced_accuracy
+        else ""
+    )
+    balanced_separator = "|---:|---:" if has_balanced_accuracy else ""
     f1_header = " | Macro F1 mean | Macro F1 std" if has_f1 else ""
     f1_separator = "|---:|---:" if has_f1 else ""
     lines = [
@@ -579,12 +603,18 @@ def generate_benchmark_report(
         f"- Training state-mode reference: `{training_mode_reference:.2f}%`",
         f"- Evaluation state-mode ceiling: `{evaluation_ceiling:.2f}%`",
         "",
-        f"| Algorithm | Agreement mean | Agreement std | Minimum | Maximum{f1_header} |",
-        f"|---|---:|---:|---:|---:{f1_separator}|",
+        f"| Algorithm | Agreement mean | Agreement std | Minimum | Maximum{balanced_header}{f1_header} |",
+        f"|---|---:|---:|---:|---:{balanced_separator}{f1_separator}|",
     ]
     for algorithm in algorithm_names:
         accuracy = aggregate["algorithms"][algorithm]["accuracy"]
         f1 = aggregate["algorithms"][algorithm].get("macro_f1")
+        balanced = aggregate["algorithms"][algorithm].get("balanced_accuracy")
+        balanced_values = (
+            f" | {100 * balanced['mean']:.2f}% | {100 * balanced['std']:.2f}%"
+            if balanced is not None
+            else ""
+        )
         f1_values = (
             f" | {100 * f1['mean']:.2f}% | {100 * f1['std']:.2f}%"
             if f1 is not None
@@ -594,7 +624,7 @@ def generate_benchmark_report(
             f"| {DISPLAY_NAMES.get(algorithm, algorithm)} "
             f"| {100 * accuracy['mean']:.2f}% | {100 * accuracy['std']:.2f}% "
             f"| {100 * accuracy['minimum']:.2f}% "
-            f"| {100 * accuracy['maximum']:.2f}%{f1_values} |"
+            f"| {100 * accuracy['maximum']:.2f}%{balanced_values}{f1_values} |"
         )
     if all(
         "overlap_slices" in aggregate["algorithms"][name] for name in algorithm_names

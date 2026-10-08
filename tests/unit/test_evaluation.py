@@ -31,6 +31,14 @@ def test_policy_agreement_matrix_is_symmetric_and_label_free():
     }
 
 
+def test_balanced_accuracy_averages_recall_of_supported_actions():
+    result = classification_metrics(
+        np.array([0, 0, 0, 1]), np.array([0, 0, 1, 1]), num_actions=3
+    )
+    assert result["accuracy"] == 0.75
+    assert result["balanced_accuracy"] == pytest.approx((2 / 3 + 1) / 2)
+
+
 @pytest.mark.parametrize(
     "predictions",
     [
@@ -107,6 +115,7 @@ class RecordingModel(nn.Module):
     def forward(self, states: torch.Tensor) -> torch.Tensor:
         assert not self.training
         assert not torch.is_grad_enabled()
+        assert torch.is_inference_mode_enabled()
         self.batch_lengths.append(len(states))
         return torch.stack((states, -states), dim=1)
 
@@ -173,6 +182,37 @@ def test_empty_predictions_preserve_training_mode() -> None:
     assert model.batch_lengths == []
 
 
+@pytest.mark.parametrize(
+    "malformation", ["vector", "rows", "actions", "non_tensor", "changed_actions"]
+)
+def test_prediction_rejects_malformed_model_output_and_restores_mode(
+    malformation: str,
+) -> None:
+    class MalformedModel(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = 0
+
+        def forward(self, states: torch.Tensor):
+            self.calls += 1
+            if malformation == "vector":
+                return torch.zeros(len(states))
+            if malformation == "rows":
+                return torch.zeros(len(states) + 1, 2)
+            if malformation == "actions":
+                return torch.zeros(len(states), 1)
+            if malformation == "non_tensor":
+                return [[0.0, 1.0]] * len(states)
+            return torch.zeros(len(states), 2 if self.calls == 1 else 3)
+
+    model = MalformedModel()
+    with pytest.raises(ValueError, match=r"consistent \[batch, actions\] Q-values"):
+        predict_actions(
+            model, np.array([0, 1, 2]), device=torch.device("cpu"), batch_size=2
+        )
+    assert model.training
+
+
 @pytest.mark.parametrize("field", ["targets", "predictions"])
 @pytest.mark.parametrize("labels", [[0.5], [np.nan], [np.inf], ["0"], [True]])
 def test_metrics_reject_invalid_labels(field: str, labels: list) -> None:
@@ -192,6 +232,23 @@ def test_metrics_accept_integer_valued_floats() -> None:
     result = classification_metrics(np.array([0.0, 1.0]), np.array([0.0, 0.0]))
     assert result["accuracy"] == 0.5
     assert result["per_action_support"] == {"0": 1, "1": 1, "2": 0, "3": 0}
+
+
+def test_metrics_accept_tensors_that_track_gradients() -> None:
+    predictions = torch.tensor([0.0, 1.0, 0.0], requires_grad=True)
+    result = classification_metrics(torch.tensor([0, 1, 1]), predictions)
+    assert result["accuracy"] == pytest.approx(2 / 3)
+    assert result["balanced_accuracy"] == 0.75
+    assert predictions.grad is None
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
+def test_metrics_accept_cuda_tensors() -> None:
+    result = classification_metrics(
+        torch.tensor([0, 1], device="cuda"),
+        torch.tensor([0, 1], device="cuda"),
+    )
+    assert result["accuracy"] == 1.0
 
 
 @pytest.mark.parametrize("batch_size", [0, -1, True, 1.5])

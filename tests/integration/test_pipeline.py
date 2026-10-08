@@ -139,6 +139,7 @@ def test_end_to_end_run_writes_loadable_reproducible_artifacts(tmp_path) -> None
     assert slices["unseen_state"] == {"rows": 0, "accuracy": None}
     evaluation = metrics["algorithms"]["dqn"]["evaluation"]
     assert 0 <= evaluation["macro_f1"] <= 1
+    assert 0 <= evaluation["balanced_accuracy"] <= 1
     assert set(evaluation["per_action_precision"]) == {"0", "1", "2", "3"}
     assert metrics["algorithms"]["dqn"]["target_synchronizations"] == 5
     assert {
@@ -160,7 +161,9 @@ def test_end_to_end_run_writes_loadable_reproducible_artifacts(tmp_path) -> None
     assert all(value >= 0 for value in history["mean_gradient_norm"])
     assert all(0 <= value <= 1 for value in history["clipped_fraction"])
     assert "Gradient clipping" in summary
-    assert "| Algorithm | Agreement | Macro F1 | Recall a0" in summary
+    assert (
+        "| Algorithm | Agreement | Balanced accuracy | Macro F1 | Recall a0" in summary
+    )
     assert "Per-action precision and F1" in summary
     assert "Agreement by training overlap" in summary
     assert "| DQN | Unseen state | 0 | N/A |" in summary
@@ -412,6 +415,7 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
     assert aggregate["num_runs"] == 2
     assert aggregate["policy_agreement"] == {"num_examples": 4, "pairs": []}
     assert "macro_f1" in aggregate["algorithms"]["dqn"]
+    assert "balanced_accuracy" in aggregate["algorithms"]["dqn"]
     assert aggregate["algorithms"]["dqn"]["overlap_slices"]["unseen_state"] == {
         "rows": 0,
         "accuracy": None,
@@ -438,6 +442,7 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
     benchmark_summary = (benchmark_dir / "benchmark.md").read_text()
     assert "| Algorithm | Agreement mean | Agreement std" in benchmark_summary
     assert "Macro F1 mean | Macro F1 std" in benchmark_summary
+    assert "Balanced accuracy mean | Balanced accuracy std" in benchmark_summary
     assert "Action stability across seeds" in benchmark_summary
     assert "| DQN | Unseen state | 0 | N/A | N/A |" in benchmark_summary
     assert "| DQN |" in benchmark_summary

@@ -249,6 +249,26 @@ def test_macro_f1_is_aggregated_and_invalid_values_are_rejected(tmp_path):
         aggregate_runs(paths, [1, 2])
 
 
+def test_balanced_accuracy_is_aggregated_and_validated(tmp_path):
+    paths = _runs(tmp_path, {"dqn": [0.5, 0.5]}, [1, 2])
+    for path, score in zip(paths, [0.25, 0.75], strict=True):
+        metrics_path = path / "metrics.json"
+        metrics = json.loads(metrics_path.read_text())
+        metrics["algorithms"]["dqn"]["evaluation"]["balanced_accuracy"] = score
+        metrics_path.write_text(json.dumps(metrics))
+    aggregate = aggregate_runs(paths, [1, 2])
+    assert aggregate["algorithms"]["dqn"]["balanced_accuracy"]["mean"] == 0.5
+    generate_benchmark_report(tmp_path, aggregate)
+    assert "Balanced accuracy mean" in (tmp_path / "benchmark.md").read_text()
+
+    metrics_path = paths[1] / "metrics.json"
+    metrics = json.loads(metrics_path.read_text())
+    metrics["algorithms"]["dqn"]["evaluation"]["balanced_accuracy"] = 1.5
+    metrics_path.write_text(json.dumps(metrics))
+    with pytest.raises(ValueError, match="balanced accuracy"):
+        aggregate_runs(paths, [1, 2])
+
+
 def test_aggregate_overlap_slices_and_report_nonempty_groups(tmp_path):
     paths = _runs(tmp_path, {"dqn": [0.5, 0.75]}, [1, 2])
     for path, score in zip(paths, [0.5, 0.75], strict=True):

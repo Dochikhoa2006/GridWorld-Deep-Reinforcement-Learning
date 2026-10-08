@@ -216,7 +216,9 @@ These figures describe agreement on the provided split, not environment return.
 Run metrics also include the fraction of evaluation rows whose state-action
 pair was observed in training. This pair overlap includes new transitions at a
 previously seen pair and is shown in the experiment summary. Metrics also include
-per-action precision and F1, predicted-action counts, and macro F1. The
+per-action precision and F1, predicted-action counts, balanced accuracy, and
+macro F1. Balanced accuracy averages recall over actions with true evaluation
+rows. The benchmark summarizes it across seeds. The
 experiment summary lists precision and F1 next to each action's
 support and prediction count. Macro F1 averages the F1 values of actions with
 at least one true evaluation row; actions with no true rows are excluded. An

@@ -20,7 +20,7 @@ def predict_actions(
     device: torch.device,
     batch_size: int = 1024,
 ) -> np.ndarray:
-    """Predict greedy actions without retaining an autograd graph."""
+    """Predict greedy actions in batches into a single output array."""
 
     if (
         isinstance(batch_size, bool)
@@ -30,11 +30,12 @@ def predict_actions(
         raise ValueError("batch_size must be a positive integer.")
 
     state_values = states if isinstance(states, torch.Tensor) else np.asarray(states)
-    predictions: list[torch.Tensor] = []
+    predictions = np.empty(len(state_values), dtype=np.int64)
+    num_actions: int | None = None
     was_training = model.training
     model.eval()
     try:
-        with torch.no_grad():
+        with torch.inference_mode():
             for start in range(0, len(state_values), batch_size):
                 selection = state_values[start : start + batch_size]
                 # torch.tensor copies each NumPy slice, including read-only
@@ -45,17 +46,29 @@ def predict_actions(
                     else torch.tensor(selection, dtype=torch.long, device=device)
                 )
                 q_values = model(batch)
+                if (
+                    not isinstance(q_values, torch.Tensor)
+                    or q_values.ndim != 2
+                    or q_values.shape[0] != len(batch)
+                    or q_values.shape[1] < 2
+                    or (num_actions is not None and q_values.shape[1] != num_actions)
+                ):
+                    raise ValueError(
+                        f"Model must return consistent [batch, actions] Q-values "
+                        f"during prediction at rows {start}..{start + len(batch) - 1}."
+                    )
+                num_actions = q_values.shape[1]
                 if not torch.isfinite(q_values).all():
                     raise ValueError(
                         f"Non-finite Q-values during prediction at rows "
                         f"{start}..{start + len(batch) - 1}."
                     )
-                predictions.append(q_values.argmax(dim=1).cpu())
+                predictions[start : start + len(batch)] = (
+                    q_values.argmax(dim=1).cpu().numpy()
+                )
     finally:
         model.train(was_training)
-    if not predictions:
-        return np.empty(0, dtype=np.int64)
-    return torch.cat(predictions).numpy()
+    return predictions
 
 
 def classification_metrics(
@@ -73,8 +86,16 @@ def classification_metrics(
     ):
         raise ValueError("num_actions must be a positive integer.")
 
-    actual = np.asarray(targets)
-    predicted = np.asarray(predictions)
+    actual = (
+        targets.detach().cpu().numpy()
+        if isinstance(targets, torch.Tensor)
+        else np.asarray(targets)
+    )
+    predicted = (
+        predictions.detach().cpu().numpy()
+        if isinstance(predictions, torch.Tensor)
+        else np.asarray(predictions)
+    )
     if actual.ndim != 1 or predicted.ndim != 1:
         raise ValueError("targets and predictions must be one-dimensional.")
     if len(actual) != len(predicted):
@@ -117,6 +138,7 @@ def classification_metrics(
     )
     return {
         "accuracy": float((actual == predicted).mean()),
+        "balanced_accuracy": float(recall[support > 0].mean()),
         "macro_f1": float(f1[support > 0].mean()),
         "num_examples": len(actual),
         "confusion_matrix": confusion.tolist(),

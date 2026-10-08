@@ -151,6 +151,12 @@ def generate_report(run_dir: str | Path) -> list[Path]:
         "macro_f1" in metrics["algorithms"][algorithm]["evaluation"]
         for algorithm in algorithms
     )
+    has_balanced_accuracy = all(
+        "balanced_accuracy" in metrics["algorithms"][algorithm]["evaluation"]
+        for algorithm in algorithms
+    )
+    balanced_header = "Balanced accuracy | " if has_balanced_accuracy else ""
+    balanced_separator = "---:|" if has_balanced_accuracy else ""
     f1_header = "Macro F1 | " if has_f1 else ""
     f1_separator = "---:|" if has_f1 else ""
     lines = [
@@ -201,8 +207,8 @@ def generate_report(run_dir: str | Path) -> list[Path]:
             f"`{100 * metrics['evaluation_split_diagnostics']['evaluation_state_mode_ceiling']:.2f}%`"
         ),
         "",
-        f"| Algorithm | Agreement | {f1_header}{recall_headers} |",
-        f"|---|---:|{f1_separator}{'---:|' * len(action_keys)}",
+        f"| Algorithm | Agreement | {balanced_header}{f1_header}{recall_headers} |",
+        f"|---|---:|{balanced_separator}{f1_separator}{'---:|' * len(action_keys)}",
     ]
     for algorithm in algorithms:
         evaluation = metrics["algorithms"][algorithm]["evaluation"]
@@ -211,10 +217,15 @@ def generate_report(run_dir: str | Path) -> list[Path]:
             f"{100 * recalls[action]:.2f}%" for action in action_keys
         )
         macro_value = f"{100 * evaluation['macro_f1']:.2f}% | " if has_f1 else ""
+        balanced_value = (
+            f"{100 * evaluation['balanced_accuracy']:.2f}% | "
+            if has_balanced_accuracy
+            else ""
+        )
         lines.append(
             f"| {DISPLAY_NAMES.get(algorithm, algorithm)} "
             f"| {100 * evaluation['accuracy']:.2f}% "
-            f"| {macro_value}{recall_values} |"
+            f"| {balanced_value}{macro_value}{recall_values} |"
         )
     if all(
         {"mean_gradient_norm", "clipped_fraction"}
