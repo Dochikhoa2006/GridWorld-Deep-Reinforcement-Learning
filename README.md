@@ -545,6 +545,24 @@ manifests valid.
 Policy rows are written in batches to a temporary file, so export memory use
 does not grow with the number of states.
 
+### Compare saved checkpoints
+
+Compare two or more checkpoints over every discrete state, without evaluation
+labels or dataset files:
+
+```bash
+gridworld-rl compare-checkpoints \
+  --checkpoints artifacts/run-a/checkpoints/dqn.pt artifacts/run-b/checkpoints/cql.pt \
+  --batch-size 256
+```
+
+The command prints JSON with checkpoint SHA-256 hashes, algorithm names, per-action
+prediction counts, unanimous and disputed state counts, and pairwise action
+agreement rates. All checkpoints must use the same state and action dimensions.
+Inference runs in batches, and checkpoint hashes are checked again before results
+are printed. Agreement measures policy similarity across the configured state
+space, including unobserved states; it does not measure correctness or return.
+
 ## Repository structure
 
 ```text

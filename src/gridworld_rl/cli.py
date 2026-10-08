@@ -22,6 +22,7 @@ COMMANDS = frozenset(
         "inspect-checkpoint",
         "export-policy",
         "predict",
+        "compare-checkpoints",
     }
 )
 ROOT_ONLY_OPTIONS = frozenset({"-h", "--help", "--version"})
@@ -122,6 +123,15 @@ def build_parser() -> argparse.ArgumentParser:
     predict.add_argument(
         "--compact", action="store_true", help="omit per-action Q-value columns"
     )
+    compare = subparsers.add_parser(
+        "compare-checkpoints",
+        help="compare saved greedy policies across every discrete state",
+    )
+    compare.add_argument("--checkpoints", nargs="+", required=True)
+    compare.add_argument(
+        "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
+    )
+    compare.add_argument("--batch-size", type=int, default=1024)
     return parser
 
 
@@ -380,6 +390,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 compact=args.compact,
             )
             print(f"Predictions exported: {output.resolve()}")
+        elif args.command == "compare-checkpoints":
+            from .comparison import compare_checkpoints
+
+            result = compare_checkpoints(
+                args.checkpoints, device=args.device, batch_size=args.batch_size
+            )
+            print(json.dumps(result, sort_keys=True, allow_nan=False))
         elif args.command == "verify":
             from .integrity import verify_artifacts
 

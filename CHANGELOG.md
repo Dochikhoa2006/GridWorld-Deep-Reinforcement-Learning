@@ -10,6 +10,9 @@ tagged releases.
 
 ### Added
 
+- A `compare-checkpoints` CLI command for label-free, full-state policy agreement
+  with pairwise rates, action counts, and checkpoint fingerprints.
+
 - A `src/gridworld_rl` package with explicit configuration, data, model, algorithm,
   training, evaluation, checkpoint, reporting, benchmarking, reproducibility, and
   CLI responsibilities.
