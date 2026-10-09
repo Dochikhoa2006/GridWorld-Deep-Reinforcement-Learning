@@ -553,12 +553,18 @@ labels or dataset files:
 ```bash
 gridworld-rl compare-checkpoints \
   --checkpoints artifacts/run-a/checkpoints/dqn.pt artifacts/run-b/checkpoints/cql.pt \
+  --train Gridworld-10_Dataset/train.csv \
   --batch-size 256
 ```
 
 The command prints JSON with checkpoint SHA-256 hashes, algorithm names, per-action
 prediction counts, unanimous and disputed state counts, and pairwise action
 agreement rates. All checkpoints must use the same state and action dimensions.
+With `--train`, the JSON also reports agreement separately for observed and
+unobserved states, and the fraction of observed states where each policy's
+greedy action appears in the logged transitions. An absent unobserved group has
+a `null` agreement rate. The training CSV hash is recorded and checked again
+before results are printed. Omit `--train` for the original label-free output.
 Inference runs in batches, and checkpoint hashes are checked again before results
 are printed. Agreement measures policy similarity across the configured state
 space, including unobserved states; it does not measure correctness or return.

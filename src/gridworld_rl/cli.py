@@ -130,6 +130,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compare.add_argument("--checkpoints", nargs="+", required=True)
     compare.add_argument(
+        "--train", help="validated training CSV for observed-state support diagnostics"
+    )
+    compare.add_argument(
         "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
     )
     compare.add_argument("--batch-size", type=int, default=1024)
@@ -407,7 +410,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             from .comparison import compare_checkpoints
 
             result = compare_checkpoints(
-                args.checkpoints, device=args.device, batch_size=args.batch_size
+                args.checkpoints,
+                device=args.device,
+                batch_size=args.batch_size,
+                train_csv=args.train,
             )
             print(json.dumps(result, sort_keys=True, allow_nan=False))
         elif args.command == "audit-policy-support":

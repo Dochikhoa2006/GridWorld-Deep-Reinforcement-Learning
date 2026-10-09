@@ -98,3 +98,70 @@ def test_comparison_rejects_nonfinite_inference(tmp_path):
     torch.save(payload, second)
     with pytest.raises(ValueError, match="non-finite Q-values"):
         compare_checkpoints([first, second], batch_size=2)
+
+
+def test_comparison_stratifies_agreement_and_logged_support(tmp_path, capsys):
+    first = _checkpoint(tmp_path, "a.pt", [0, 0, 1, 1])
+    second = _checkpoint(tmp_path, "b.pt", [0, 1, 1, 1])
+    train = tmp_path / "train.csv"
+    train.write_text(
+        "state,action,reward,next_state,done\n0,0,0,1,0\n1,0,0,2,0\n2,0,0,3,1\n"
+    )
+    result = compare_checkpoints([first, second], train_csv=train, batch_size=2)
+    support = result["training_support"]
+    assert support["train_sha256"] == sha256_file(train)
+    assert (support["observed_states"], support["unobserved_states"]) == (3, 1)
+    assert [row["supported_observed_states"] for row in support["checkpoints"]] == [
+        2,
+        1,
+    ]
+    assert support["pairs"][0]["observed_agree"] == 2
+    assert support["pairs"][0]["unobserved_agree"] == 1
+    assert support["pairs"][0]["observed_agreement_rate"] == pytest.approx(2 / 3)
+    assert (
+        main(
+            [
+                "compare-checkpoints",
+                "--checkpoints",
+                str(first),
+                str(second),
+                "--train",
+                str(train),
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out) == result
+
+
+def test_comparison_support_handles_no_unobserved_states(tmp_path):
+    first = _checkpoint(tmp_path, "a.pt", [0, 0, 1, 1])
+    second = _checkpoint(tmp_path, "b.pt", [0, 1, 1, 1])
+    train = tmp_path / "train.csv"
+    train.write_text(
+        "state,action,reward,next_state,done\n"
+        + "".join(f"{state},0,0,{state},1\n" for state in range(4))
+    )
+    support = compare_checkpoints([first, second], train_csv=train)["training_support"]
+    assert support["pairs"][0]["unobserved_agreement_rate"] is None
+
+
+def test_comparison_rejects_changed_training_csv(tmp_path, monkeypatch):
+    first = _checkpoint(tmp_path, "a.pt", [0, 0, 1, 1])
+    second = _checkpoint(tmp_path, "b.pt", [0, 1, 1, 1])
+    train = tmp_path / "train.csv"
+    train.write_text("state,action,reward,next_state,done\n0,0,0,1,0\n")
+    real_hash = sha256_file
+
+    calls = [False]
+
+    def tracked_hash(path):
+        if str(path) == str(train):
+            if calls[0]:
+                return "changed"
+            calls[0] = True
+        return real_hash(path)
+
+    monkeypatch.setattr("gridworld_rl.comparison.sha256_file", tracked_hash)
+    with pytest.raises(ValueError, match="Training CSV changed"):
+        compare_checkpoints([first, second], train_csv=train)

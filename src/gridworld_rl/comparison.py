@@ -5,16 +5,22 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
 
 from .checkpoints import load_checkpoint
+from .data import load_transition_csv
 from .reproducibility import resolve_device, sha256_file
 
 
 def compare_checkpoints(
-    checkpoints: list[str | Path], *, device: str = "cpu", batch_size: int = 1024
+    checkpoints: list[str | Path],
+    *,
+    device: str = "cpu",
+    batch_size: int = 1024,
+    train_csv: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Compare greedy actions for every discrete state in bounded batches."""
+    """Compare greedy actions, optionally stratified by logged training support."""
 
     if len(checkpoints) < 2:
         raise ValueError("At least two checkpoints are required.")
@@ -39,8 +45,24 @@ def compare_checkpoints(
     ):
         raise ValueError("Checkpoints must have identical state and action dimensions.")
 
+    train_path = Path(train_csv) if train_csv is not None else None
+    train_hash = sha256_file(train_path) if train_path is not None else None
+    observed = np.zeros(num_states, dtype=bool) if train_path is not None else None
+    logged_pairs: set[tuple[int, int]] = set()
+    if train_path is not None:
+        frame = load_transition_csv(
+            train_path, num_states=num_states, num_actions=num_actions
+        )
+        state_ids = frame["state"].to_numpy(dtype=np.int64)
+        action_ids = frame["action"].to_numpy(dtype=np.int64)
+        observed[state_ids] = True
+        logged_pairs = set(zip(state_ids, action_ids, strict=True))
+
     counts = [[0] * num_actions for _ in models]
     agreements = [[0] * len(models) for _ in models]
+    observed_agreements = [[0] * len(models) for _ in models]
+    supported_counts = [0] * len(models)
+    observed_count = int(observed.sum()) if observed is not None else 0
     unanimous = 0
     with torch.inference_mode():
         for start in range(0, num_states, batch_size):
@@ -63,19 +85,37 @@ def compare_checkpoints(
                     for total, amount in zip(counts[index], batch_counts, strict=True)
                 ]
             unanimous += int(torch.stack(actions).eq(actions[0]).all(dim=0).sum())
+            if observed is not None:
+                state_batch = np.arange(start, start + len(states))
+                seen = torch.as_tensor(observed[state_batch], device=selected_device)
+                for index, predicted in enumerate(actions):
+                    supported_counts[index] += sum(
+                        (int(state), int(action)) in logged_pairs
+                        for state, action in zip(
+                            state_batch[observed[state_batch]],
+                            predicted[seen].cpu().tolist(),
+                            strict=True,
+                        )
+                    )
             for left in range(len(models)):
                 for right in range(left + 1, len(models)):
-                    agreements[left][right] += int(
-                        (actions[left] == actions[right]).sum()
-                    )
+                    equal = actions[left] == actions[right]
+                    agreements[left][right] += int(equal.sum())
+                    if observed is not None:
+                        observed_agreements[left][right] += int(equal[seen].sum())
 
     for path, fingerprint in zip(paths, fingerprints, strict=True):
         if sha256_file(path) != fingerprint:
             raise ValueError(
                 f"Checkpoint changed during comparison: {path}; retry with stable files."
             )
+    if train_path is not None and sha256_file(train_path) != train_hash:
+        raise ValueError(
+            f"Training CSV changed during comparison: {train_path}; "
+            "retry with stable files."
+        )
 
-    return {
+    result = {
         "schema_version": 1,
         "num_states": num_states,
         "num_actions": num_actions,
@@ -105,3 +145,40 @@ def compare_checkpoints(
             for right in range(left + 1, len(models))
         ],
     }
+    if train_path is not None:
+        result["training_support"] = {
+            "train_path": str(train_path),
+            "train_sha256": train_hash,
+            "observed_states": observed_count,
+            "unobserved_states": num_states - observed_count,
+            "checkpoints": [
+                {
+                    "supported_observed_states": count,
+                    "unsupported_observed_states": observed_count - count,
+                    "observed_state_support_rate": count / observed_count,
+                }
+                for count in supported_counts
+            ],
+            "pairs": [
+                {
+                    "left": left,
+                    "right": right,
+                    "observed_agree": observed_agreements[left][right],
+                    "observed_agreement_rate": (
+                        observed_agreements[left][right] / observed_count
+                    ),
+                    "unobserved_agree": (
+                        agreements[left][right] - observed_agreements[left][right]
+                    ),
+                    "unobserved_agreement_rate": (
+                        (agreements[left][right] - observed_agreements[left][right])
+                        / (num_states - observed_count)
+                        if observed_count < num_states
+                        else None
+                    ),
+                }
+                for left in range(len(models))
+                for right in range(left + 1, len(models))
+            ],
+        }
+    return result
