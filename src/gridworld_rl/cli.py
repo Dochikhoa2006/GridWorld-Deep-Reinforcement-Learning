@@ -196,6 +196,9 @@ def build_parser() -> argparse.ArgumentParser:
         "audit-run", help="cross-check contents of a saved experiment run"
     )
     run_audit.add_argument("--run-dir", required=True)
+    run_audit.add_argument(
+        "--data-dir", help="original train and evaluation CSVs for inference checks"
+    )
     benchmark_audit = subparsers.add_parser(
         "audit-benchmark",
         help="cross-check nested runs and a saved benchmark aggregate",
@@ -521,7 +524,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "audit-run":
             from .run_audit import audit_run
 
-            result = audit_run(args.run_dir)
+            result = audit_run(args.run_dir, data_dir=args.data_dir)
             print(json.dumps(result, sort_keys=True, allow_nan=False))
             return 0 if result["valid"] else 1
         elif args.command == "audit-benchmark":

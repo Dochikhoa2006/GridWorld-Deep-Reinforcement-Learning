@@ -341,6 +341,45 @@ def test_run_audit_reports_hash_damage_before_loading_content(tmp_path) -> None:
     assert result["issues"] == ["modified: predictions.json"]
 
 
+def test_run_audit_replays_checkpoint_inference_with_original_data(
+    tmp_path, capsys
+) -> None:
+    run_dir = run_experiment(_config(tmp_path))
+    assert audit_run(run_dir, data_dir=tmp_path)["valid"]
+    assert (
+        main(["audit-run", "--run-dir", str(run_dir), "--data-dir", str(tmp_path)]) == 0
+    )
+    assert json.loads(capsys.readouterr().out)["valid"]
+
+    predictions_path = run_dir / "predictions.json"
+    predictions = json.loads(predictions_path.read_text())
+    actions = predictions["predictions"]["dqn"]
+    actions[0] = (actions[0] + 1) % 4
+    predictions_path.write_text(json.dumps(predictions))
+    metrics_path = run_dir / "metrics.json"
+    metrics = json.loads(metrics_path.read_text())
+    metrics["algorithms"]["dqn"]["evaluation"]["per_action_prediction_count"] = {
+        str(action): actions.count(action) for action in range(4)
+    }
+    metrics_path.write_text(json.dumps(metrics))
+    manifest_path = run_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    for name in ("predictions.json", "metrics.json"):
+        manifest["sha256"][name] = sha256_file(run_dir / name)
+    manifest_path.write_text(json.dumps(manifest))
+    assert audit_run(run_dir)["valid"]
+    replayed = audit_run(run_dir, data_dir=tmp_path)
+    assert replayed["valid"] is False
+    assert (
+        "Saved predictions differ from checkpoint inference for dqn."
+        in replayed["issues"]
+    )
+    assert (
+        "Evaluation metrics differ from checkpoint inference for dqn."
+        in replayed["issues"]
+    )
+
+
 def test_step_limited_run_saves_partial_epoch_metadata(tmp_path) -> None:
     config = _config(tmp_path)
     config.training.max_optimizer_steps = 1

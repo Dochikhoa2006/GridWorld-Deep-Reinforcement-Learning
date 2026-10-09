@@ -544,6 +544,12 @@ any issues; exit status is `0` when consistent and `1` when inconsistencies are
 found. This catches some internally contradictory artifacts even if their
 manifest was regenerated. It does not authenticate who created the artifacts
 or re-evaluate predictions against unavailable dataset files.
+When the original CSVs are available, add `--data-dir Gridworld-10_Dataset`.
+The audit verifies their saved fingerprints, replays each checkpoint on the
+challenge states, and recomputes evaluation, split, training-dynamics, and
+logged-policy-support diagnostics. Input files are fingerprinted again before
+the audit returns. This detects stale predictions and metrics that are internally
+consistent but disagree with the saved model or original data.
 
 For a saved multi-seed comparison, use
 `gridworld-rl audit-benchmark --benchmark-dir artifacts/benchmarks/five-seed-study`.
