@@ -25,6 +25,7 @@ COMMANDS = frozenset(
         "compare-checkpoints",
         "audit-policy-support",
         "evaluate-checkpoint",
+        "compare-evaluations",
     }
 )
 ROOT_ONLY_OPTIONS = frozenset({"-h", "--help", "--version"})
@@ -163,6 +164,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
     )
     evaluate.add_argument("--batch-size", type=int, default=1024)
+    paired = subparsers.add_parser(
+        "compare-evaluations",
+        help="score multiple checkpoints on the same evaluation rows",
+    )
+    paired.add_argument("--checkpoints", nargs="+", required=True)
+    paired.add_argument("--challenge", required=True)
+    paired.add_argument("--solution", required=True)
+    paired.add_argument("--train", help="training CSV for overlap diagnostics")
+    paired.add_argument(
+        "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
+    )
+    paired.add_argument("--batch-size", type=int, default=1024)
     return parser
 
 
@@ -446,6 +459,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             result = evaluate_checkpoint(
                 args.checkpoint,
+                args.challenge,
+                args.solution,
+                train_csv=args.train,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+            print(json.dumps(result, sort_keys=True, allow_nan=False))
+        elif args.command == "compare-evaluations":
+            from .paired_evaluation import compare_evaluations
+
+            result = compare_evaluations(
+                args.checkpoints,
                 args.challenge,
                 args.solution,
                 train_csv=args.train,

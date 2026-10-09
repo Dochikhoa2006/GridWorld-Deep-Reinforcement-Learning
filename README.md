@@ -589,6 +589,24 @@ training CSV is unavailable. The files are validated and fingerprinted again
 before output. This measures agreement with the solution labels, not environment
 return; overlapping transitions should be interpreted using the split diagnostics.
 
+To compare two or more saved policies on the same evaluation rows, run:
+
+```bash
+gridworld-rl compare-evaluations \
+  --checkpoints artifacts/run-a/checkpoints/dqn.pt artifacts/run-b/checkpoints/cql.pt \
+  --challenge Gridworld-10_Dataset/eval_challenge.csv \
+  --solution Gridworld-10_Dataset/eval_solution.csv \
+  --train Gridworld-10_Dataset/train.csv
+```
+
+This prints each checkpoint's classification metrics and, for every pair,
+counts of rows both got right, only the left got right, only the right got
+right, and both got wrong. It also reports action agreement, which can differ
+from correctness agreement. The optional training CSV adds shared split
+diagnostics and each policy's overlap-sliced accuracy. Checkpoints must have
+matching state and action dimensions; input hashes are checked again before
+printing. These descriptive counts do not establish statistical significance.
+
 ### Audit logged action support
 
 Check whether a checkpoint's greedy action at each state seen in training also
