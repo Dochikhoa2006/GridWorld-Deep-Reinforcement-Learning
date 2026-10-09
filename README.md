@@ -602,6 +602,23 @@ manifests valid.
 Policy rows are written in batches to a temporary file, so export memory use
 does not grow with the number of states.
 
+To restrict the exported action at every observed state to actions actually
+logged with that state, run:
+
+```bash
+gridworld-rl export-supported-policy \
+  --checkpoint artifacts/smoke-seed-42/checkpoints/cql.pt \
+  --train Gridworld-10_Dataset/train.csv \
+  --output artifacts/cql-supported-policy.json
+```
+
+The export records both the checkpoint's unconstrained greedy action and the
+highest-Q logged action, plus the logged action set and a summary of changed
+states. Unobserved states use the unconstrained action. Exact Q-value ties use
+the lowest action index. Checkpoint and training-file hashes are recorded and
+rechecked before a new output file is published. This is a support-constrained
+decision rule, not evidence that the resulting policy is safe or optimal.
+
 ### Compare saved checkpoints
 
 Compare two or more checkpoints over every discrete state, without evaluation

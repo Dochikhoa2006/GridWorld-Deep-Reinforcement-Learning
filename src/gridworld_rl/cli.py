@@ -29,6 +29,7 @@ COMMANDS = frozenset(
         "compare-runs",
         "audit-run",
         "audit-benchmark",
+        "export-supported-policy",
     }
 )
 ROOT_ONLY_OPTIONS = frozenset({"-h", "--help", "--version"})
@@ -116,6 +117,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
     )
     export.add_argument("--batch-size", type=int, default=1024)
+    supported_export = subparsers.add_parser(
+        "export-supported-policy",
+        help="export greedy actions restricted to logged actions at observed states",
+    )
+    supported_export.add_argument("--checkpoint", required=True)
+    supported_export.add_argument("--train", required=True)
+    supported_export.add_argument("--output", required=True)
+    supported_export.add_argument(
+        "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
+    )
+    supported_export.add_argument("--batch-size", type=int, default=1024)
     predict = subparsers.add_parser(
         "predict", help="predict actions for states listed in a CSV file"
     )
@@ -439,6 +451,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 batch_size=args.batch_size,
             )
             print(f"Policy exported: {output.resolve()}")
+        elif args.command == "export-supported-policy":
+            from .supported_policy import export_supported_policy
+
+            output = export_supported_policy(
+                args.checkpoint,
+                args.train,
+                args.output,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+            print(f"Supported policy exported: {output.resolve()}")
         elif args.command == "inspect-checkpoint":
             from .checkpoints import inspect_checkpoint
 
