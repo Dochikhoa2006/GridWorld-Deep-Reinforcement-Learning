@@ -531,6 +531,20 @@ Changed training data or hyperparameters are shown separately so a score
 difference is not mistaken for a controlled seed comparison. The output is JSON
 and the command does not modify either run.
 
+For a deeper check of one saved experiment, run:
+
+```bash
+gridworld-rl audit-run --run-dir artifacts/smoke-seed-42
+```
+
+This first verifies the manifest, then checks agreement between the resolved
+configuration, metrics, predictions, and checkpoint metadata. It recomputes
+predicted-action counts and the saved policy-agreement matrix. The JSON lists
+any issues; exit status is `0` when consistent and `1` when inconsistencies are
+found. This catches some internally contradictory artifacts even if their
+manifest was regenerated. It does not authenticate who created the artifacts
+or re-evaluate predictions against unavailable dataset files.
+
 See [Architecture](docs/ARCHITECTURE.md) for component and data-flow details.
 
 ### Inspect a checkpoint

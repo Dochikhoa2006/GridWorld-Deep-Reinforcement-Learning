@@ -14,6 +14,7 @@ from gridworld_rl.config import ExperimentConfig
 from gridworld_rl.integrity import verify_artifacts
 from gridworld_rl.report import generate_report
 from gridworld_rl.reproducibility import sha256_file
+from gridworld_rl.run_audit import audit_run
 from gridworld_rl.run_comparison import compare_runs
 from gridworld_rl.trainer import run_experiment
 
@@ -303,6 +304,40 @@ def test_saved_runs_compare_with_verified_shared_evaluation(tmp_path) -> None:
     assert result["common_algorithms"] == ["dqn"]
     delta = result["metric_deltas"]["dqn"]["accuracy"]
     assert delta["right_minus_left"] == pytest.approx(delta["right"] - delta["left"])
+
+
+def test_run_audit_detects_rehashed_semantic_mismatch(tmp_path, capsys) -> None:
+    run_dir = run_experiment(_config(tmp_path))
+    assert audit_run(run_dir)["valid"]
+    assert main(["audit-run", "--run-dir", str(run_dir)]) == 0
+    assert json.loads(capsys.readouterr().out)["valid"] is True
+
+    metrics_path = run_dir / "metrics.json"
+    metrics = json.loads(metrics_path.read_text())
+    metrics["algorithms"]["dqn"]["evaluation"]["per_action_prediction_count"]["0"] += 1
+    metrics["policy_agreement"]["agreement"][0][0] = 0.5
+    metrics_path.write_text(json.dumps(metrics))
+    manifest_path = run_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["sha256"]["metrics.json"] = sha256_file(metrics_path)
+    manifest_path.write_text(json.dumps(manifest))
+    assert verify_artifacts(run_dir).valid
+    result = audit_run(run_dir)
+    assert result["valid"] is False
+    assert result["issues"] == [
+        "Prediction counts disagree with metrics for dqn.",
+        "Policy agreement matrix differs from saved predictions.",
+    ]
+    assert main(["audit-run", "--run-dir", str(run_dir)]) == 1
+    assert json.loads(capsys.readouterr().out) == result
+
+
+def test_run_audit_reports_hash_damage_before_loading_content(tmp_path) -> None:
+    run_dir = run_experiment(_config(tmp_path))
+    (run_dir / "predictions.json").write_text("broken")
+    result = audit_run(run_dir)
+    assert result["valid"] is False
+    assert result["issues"] == ["modified: predictions.json"]
 
 
 def test_step_limited_run_saves_partial_epoch_metadata(tmp_path) -> None:

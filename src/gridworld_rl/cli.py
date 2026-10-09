@@ -27,6 +27,7 @@ COMMANDS = frozenset(
         "evaluate-checkpoint",
         "compare-evaluations",
         "compare-runs",
+        "audit-run",
     }
 )
 ROOT_ONLY_OPTIONS = frozenset({"-h", "--help", "--version"})
@@ -190,6 +191,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     runs.add_argument("--left", required=True, help="first experiment run directory")
     runs.add_argument("--right", required=True, help="second experiment run directory")
+    run_audit = subparsers.add_parser(
+        "audit-run", help="cross-check contents of a saved experiment run"
+    )
+    run_audit.add_argument("--run-dir", required=True)
     return parser
 
 
@@ -507,6 +512,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             result = compare_runs(args.left, args.right)
             print(json.dumps(result, sort_keys=True, allow_nan=False))
+        elif args.command == "audit-run":
+            from .run_audit import audit_run
+
+            result = audit_run(args.run_dir)
+            print(json.dumps(result, sort_keys=True, allow_nan=False))
+            return 0 if result["valid"] else 1
         elif args.command == "verify":
             from .integrity import verify_artifacts
 
