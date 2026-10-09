@@ -506,6 +506,22 @@ unexpected files outside the derived report files. Damaged or missing figures an
 summary can be regenerated; a successful refresh updates the run manifest. Doing
 so inside a benchmark can invalidate the benchmark's original manifest.
 
+Compare two saved experiment runs without loading their original CSV files:
+
+```bash
+gridworld-rl compare-runs \
+  --left artifacts/run-a \
+  --right artifacts/run-b
+```
+
+The command verifies both run manifests, compares recorded dataset hashes and
+resolved settings, and reports each shared algorithm's accuracy, balanced
+accuracy, and macro F1 difference (right minus left). Metric deltas appear only
+when evaluation challenge and solution hashes and state/action dimensions match.
+Changed training data or hyperparameters are shown separately so a score
+difference is not mistaken for a controlled seed comparison. The output is JSON
+and the command does not modify either run.
+
 See [Architecture](docs/ARCHITECTURE.md) for component and data-flow details.
 
 ### Inspect a checkpoint

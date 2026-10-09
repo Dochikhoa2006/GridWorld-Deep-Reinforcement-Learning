@@ -14,6 +14,7 @@ from gridworld_rl.config import ExperimentConfig
 from gridworld_rl.integrity import verify_artifacts
 from gridworld_rl.report import generate_report
 from gridworld_rl.reproducibility import sha256_file
+from gridworld_rl.run_comparison import compare_runs
 from gridworld_rl.trainer import run_experiment
 
 
@@ -287,6 +288,21 @@ def test_report_refresh_restores_run_when_publish_fails(tmp_path, monkeypatch) -
     }
     assert verify_artifacts(run_dir).valid
     assert not list(tmp_path.glob(f".{run_dir.name}.report-*"))
+
+
+def test_saved_runs_compare_with_verified_shared_evaluation(tmp_path) -> None:
+    first_config = _config(tmp_path, "first-run")
+    first = run_experiment(first_config)
+    second_config = _config(tmp_path, "second-run")
+    second_config.training.seed += 1
+    second = run_experiment(second_config)
+    result = compare_runs(first, second)
+    assert result["same_evaluation_split"]
+    assert all(result["dataset_match"].values())
+    assert result["settings_differences"] == {}
+    assert result["common_algorithms"] == ["dqn"]
+    delta = result["metric_deltas"]["dqn"]["accuracy"]
+    assert delta["right_minus_left"] == pytest.approx(delta["right"] - delta["left"])
 
 
 def test_step_limited_run_saves_partial_epoch_metadata(tmp_path) -> None:
