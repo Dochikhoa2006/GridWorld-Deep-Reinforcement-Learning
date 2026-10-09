@@ -569,6 +569,26 @@ Inference runs in batches, and checkpoint hashes are checked again before result
 are printed. Agreement measures policy similarity across the configured state
 space, including unobserved states; it does not measure correctness or return.
 
+### Evaluate a saved checkpoint
+
+Score a checkpoint on an aligned challenge and solution pair without retraining:
+
+```bash
+gridworld-rl evaluate-checkpoint \
+  --checkpoint artifacts/smoke-seed-42/checkpoints/dqn.pt \
+  --challenge Gridworld-10_Dataset/eval_challenge.csv \
+  --solution Gridworld-10_Dataset/eval_solution.csv \
+  --train Gridworld-10_Dataset/train.csv
+```
+
+The command prints JSON with confusion matrix, action agreement, balanced
+accuracy, macro F1, per-action metrics, and SHA-256 hashes for every input.
+`--train` adds evaluation-split diagnostics and agreement for exact training
+transitions, new transitions at seen states, and unseen states. Omit it if the
+training CSV is unavailable. The files are validated and fingerprinted again
+before output. This measures agreement with the solution labels, not environment
+return; overlapping transitions should be interpreted using the split diagnostics.
+
 ### Audit logged action support
 
 Check whether a checkpoint's greedy action at each state seen in training also

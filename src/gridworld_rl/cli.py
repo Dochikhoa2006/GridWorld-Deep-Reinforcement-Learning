@@ -24,6 +24,7 @@ COMMANDS = frozenset(
         "predict",
         "compare-checkpoints",
         "audit-policy-support",
+        "evaluate-checkpoint",
     }
 )
 ROOT_ONLY_OPTIONS = frozenset({"-h", "--help", "--version"})
@@ -148,6 +149,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
     )
     audit.add_argument("--batch-size", type=int, default=1024)
+    evaluate = subparsers.add_parser(
+        "evaluate-checkpoint",
+        help="score a saved checkpoint on aligned evaluation CSVs",
+    )
+    evaluate.add_argument("--checkpoint", required=True)
+    evaluate.add_argument("--challenge", required=True)
+    evaluate.add_argument("--solution", required=True)
+    evaluate.add_argument(
+        "--train", help="training CSV for overlap and split diagnostics"
+    )
+    evaluate.add_argument(
+        "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
+    )
+    evaluate.add_argument("--batch-size", type=int, default=1024)
     return parser
 
 
@@ -422,6 +437,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = audit_policy_support(
                 args.checkpoint,
                 args.train,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+            print(json.dumps(result, sort_keys=True, allow_nan=False))
+        elif args.command == "evaluate-checkpoint":
+            from .checkpoint_evaluation import evaluate_checkpoint
+
+            result = evaluate_checkpoint(
+                args.checkpoint,
+                args.challenge,
+                args.solution,
+                train_csv=args.train,
                 device=args.device,
                 batch_size=args.batch_size,
             )
