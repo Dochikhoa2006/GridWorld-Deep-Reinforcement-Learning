@@ -28,6 +28,7 @@ COMMANDS = frozenset(
         "compare-evaluations",
         "compare-runs",
         "audit-run",
+        "audit-benchmark",
     }
 )
 ROOT_ONLY_OPTIONS = frozenset({"-h", "--help", "--version"})
@@ -195,6 +196,11 @@ def build_parser() -> argparse.ArgumentParser:
         "audit-run", help="cross-check contents of a saved experiment run"
     )
     run_audit.add_argument("--run-dir", required=True)
+    benchmark_audit = subparsers.add_parser(
+        "audit-benchmark",
+        help="cross-check nested runs and a saved benchmark aggregate",
+    )
+    benchmark_audit.add_argument("--benchmark-dir", required=True)
     return parser
 
 
@@ -516,6 +522,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             from .run_audit import audit_run
 
             result = audit_run(args.run_dir)
+            print(json.dumps(result, sort_keys=True, allow_nan=False))
+            return 0 if result["valid"] else 1
+        elif args.command == "audit-benchmark":
+            from .benchmark_audit import audit_benchmark
+
+            result = audit_benchmark(args.benchmark_dir)
             print(json.dumps(result, sort_keys=True, allow_nan=False))
             return 0 if result["valid"] else 1
         elif args.command == "verify":

@@ -545,6 +545,14 @@ found. This catches some internally contradictory artifacts even if their
 manifest was regenerated. It does not authenticate who created the artifacts
 or re-evaluate predictions against unavailable dataset files.
 
+For a saved multi-seed comparison, use
+`gridworld-rl audit-benchmark --benchmark-dir artifacts/benchmarks/five-seed-study`.
+This verifies the outer manifest, audits each nested run, checks the declared
+seed schedule and settings, and recomputes the aggregate from saved run files.
+It reports mismatched aggregate fields in JSON with the same `0`/`1` success
+and inconsistency exit statuses. It does not retrain models or require the
+original dataset CSVs.
+
 See [Architecture](docs/ARCHITECTURE.md) for component and data-flow details.
 
 ### Inspect a checkpoint

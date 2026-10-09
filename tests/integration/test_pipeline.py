@@ -8,6 +8,7 @@ import pytest
 import torch
 
 from gridworld_rl.benchmark import aggregate_runs, run_benchmark
+from gridworld_rl.benchmark_audit import audit_benchmark
 from gridworld_rl.checkpoints import load_checkpoint
 from gridworld_rl.cli import main
 from gridworld_rl.config import ExperimentConfig
@@ -601,6 +602,64 @@ def test_multi_seed_benchmark_writes_aggregate_metrics_and_manifest(tmp_path) ->
             output_directory=tmp_path / "benchmarks",
             name="comparison",
         )
+
+
+def test_benchmark_audit_recomputes_aggregate_after_hash_verification(
+    tmp_path, capsys
+) -> None:
+    benchmark_dir = run_benchmark(
+        _config(tmp_path, "unused"),
+        seeds=[3, 5],
+        output_directory=tmp_path / "benchmarks",
+        name="audited",
+    )
+    result = audit_benchmark(benchmark_dir)
+    assert result["valid"] is True
+    assert result["seeds"] == [3, 5]
+    assert main(["audit-benchmark", "--benchmark-dir", str(benchmark_dir)]) == 0
+    assert json.loads(capsys.readouterr().out) == result
+
+    aggregate_path = benchmark_dir / "aggregate_metrics.json"
+    original_aggregate = aggregate_path.read_bytes()
+    aggregate = json.loads(aggregate_path.read_text())
+    aggregate["algorithms"]["dqn"]["accuracy"]["mean"] = 0.99
+    aggregate_path.write_text(json.dumps(aggregate))
+    manifest_path = benchmark_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["sha256"]["aggregate_metrics.json"] = sha256_file(aggregate_path)
+    manifest_path.write_text(json.dumps(manifest))
+    assert verify_artifacts(benchmark_dir).valid
+    result = audit_benchmark(benchmark_dir)
+    assert result["valid"] is False
+    assert result["issues"] == ["Aggregate field differs from saved runs: algorithms."]
+    assert main(["audit-benchmark", "--benchmark-dir", str(benchmark_dir)]) == 1
+    assert json.loads(capsys.readouterr().out) == result
+
+    aggregate_path.write_bytes(original_aggregate)
+    nested_metrics_path = benchmark_dir / "runs/seed-5/metrics.json"
+    nested_metrics = json.loads(nested_metrics_path.read_text())
+    nested_metrics["algorithms"]["dqn"]["evaluation"]["per_action_prediction_count"][
+        "0"
+    ] += 1
+    nested_metrics_path.write_text(json.dumps(nested_metrics))
+    nested_manifest_path = benchmark_dir / "runs/seed-5/manifest.json"
+    nested_manifest = json.loads(nested_manifest_path.read_text())
+    nested_manifest["sha256"]["metrics.json"] = sha256_file(nested_metrics_path)
+    nested_manifest_path.write_text(json.dumps(nested_manifest))
+    manifest = json.loads(manifest_path.read_text())
+    for name in (
+        "aggregate_metrics.json",
+        "runs/seed-5/metrics.json",
+        "runs/seed-5/manifest.json",
+    ):
+        manifest["sha256"][name] = sha256_file(benchmark_dir / name)
+    manifest_path.write_text(json.dumps(manifest))
+    assert verify_artifacts(benchmark_dir).valid
+    result = audit_benchmark(benchmark_dir)
+    assert result["valid"] is False
+    assert result["issues"] == [
+        "seed-5: Prediction counts disagree with metrics for dqn."
+    ]
 
 
 def test_multi_seed_benchmark_reports_cross_algorithm_policy_agreement(tmp_path):
