@@ -29,6 +29,9 @@ def compare_evaluations(
     train_csv: str | Path | None = None,
     device: str = "cpu",
     batch_size: int = 1024,
+    bootstrap_replicates: int = 0,
+    bootstrap_seed: int = 0,
+    confidence_level: float = 0.95,
 ) -> dict[str, Any]:
     """Compare correctness and action agreement on the same evaluation rows."""
 
@@ -40,6 +43,25 @@ def compare_evaluations(
         or batch_size <= 0
     ):
         raise ValueError("batch_size must be a positive integer.")
+    if (
+        isinstance(bootstrap_replicates, bool)
+        or not isinstance(bootstrap_replicates, int)
+        or bootstrap_replicates < 0
+    ):
+        raise ValueError("bootstrap_replicates must be a non-negative integer.")
+    if (
+        isinstance(bootstrap_seed, bool)
+        or not isinstance(bootstrap_seed, int)
+        or bootstrap_seed < 0
+    ):
+        raise ValueError("bootstrap_seed must be a non-negative integer.")
+    if (
+        isinstance(confidence_level, bool)
+        or not isinstance(confidence_level, (int, float))
+        or not np.isfinite(confidence_level)
+        or not 0 < confidence_level < 1
+    ):
+        raise ValueError("confidence_level must be strictly between 0 and 1.")
     checkpoint_paths = [Path(path) for path in checkpoints]
     if len({path.resolve() for path in checkpoint_paths}) != len(checkpoint_paths):
         raise ValueError("Checkpoint paths must be distinct.")
@@ -136,6 +158,16 @@ def compare_evaluations(
                 train, solution, targets, prediction
             )
 
+    if bootstrap_replicates:
+        _add_cluster_bootstrap(
+            result,
+            states,
+            correct,
+            replicates=bootstrap_replicates,
+            seed=bootstrap_seed,
+            confidence_level=float(confidence_level),
+        )
+
     for path, fingerprint in zip(checkpoint_paths, checkpoint_hashes, strict=True):
         if sha256_file(path) != fingerprint:
             raise ValueError(
@@ -149,3 +181,50 @@ def compare_evaluations(
                 "retry with stable files."
             )
     return result
+
+
+def _add_cluster_bootstrap(
+    result: dict[str, Any],
+    states: np.ndarray,
+    correct: list[np.ndarray],
+    *,
+    replicates: int,
+    seed: int,
+    confidence_level: float,
+) -> None:
+    """Resample state IDs, retaining all rows belonging to each sampled state."""
+
+    unique_states, inverse = np.unique(states, return_inverse=True)
+    cluster_count = len(unique_states)
+    cluster_sizes = np.bincount(inverse)
+    cluster_correct = np.stack(
+        [np.bincount(inverse, weights=flags.astype(np.int64)) for flags in correct]
+    )
+    pairs = result["pairs"]
+    deltas = np.empty((len(pairs), replicates), dtype=np.float64)
+    generator = np.random.default_rng(seed)
+    for replicate in range(replicates):
+        sampled = generator.integers(0, cluster_count, size=cluster_count)
+        denominator = int(cluster_sizes[sampled].sum())
+        accuracies = cluster_correct[:, sampled].sum(axis=1) / denominator
+        for index, pair in enumerate(pairs):
+            deltas[index, replicate] = (
+                accuracies[pair["left"]] - accuracies[pair["right"]]
+            )
+    tail = (1 - confidence_level) / 2
+    for index, pair in enumerate(pairs):
+        pair["accuracy_difference_interval"] = {
+            "estimate": (pair["left_only_correct"] - pair["right_only_correct"])
+            / result["evaluation_rows"],
+            "lower": float(np.quantile(deltas[index], tail)),
+            "upper": float(np.quantile(deltas[index], 1 - tail)),
+        }
+    result["bootstrap"] = {
+        "method": "percentile state-cluster bootstrap",
+        "resampling_unit": "state",
+        "unique_states": cluster_count,
+        "replicates": replicates,
+        "seed": seed,
+        "confidence_level": confidence_level,
+        "estimand": "left row accuracy minus right row accuracy",
+    }

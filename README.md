@@ -607,6 +607,16 @@ diagnostics and each policy's overlap-sliced accuracy. Checkpoints must have
 matching state and action dimensions; input hashes are checked again before
 printing. These descriptive counts do not establish statistical significance.
 
+Add `--bootstrap-replicates 1000 --bootstrap-seed 42` to estimate a percentile
+interval for each pair's row-accuracy difference (left minus right). The
+bootstrap samples distinct state IDs with replacement and keeps all evaluation
+rows for each sampled state together. This accounts for repeated rows at a
+state; it does not make an overlapping or nonrepresentative evaluation split
+independent. The JSON records the seed, draw count, confidence level (default
+`0.95`, adjustable with `--confidence-level`), and number of distinct states.
+Intervals are omitted unless bootstrap draws are requested. With very few
+distinct states, the intervals may be coarse or degenerate.
+
 ### Audit logged action support
 
 Check whether a checkpoint's greedy action at each state seen in training also

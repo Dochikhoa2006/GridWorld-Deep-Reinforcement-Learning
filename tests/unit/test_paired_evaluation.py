@@ -130,6 +130,72 @@ def test_paired_evaluation_rejects_changed_input(tmp_path, monkeypatch):
         compare_evaluations([first, second], challenge, solution)
 
 
+def test_state_cluster_bootstrap_is_reproducible_and_keeps_duplicate_rows(
+    tmp_path, capsys
+):
+    first = _checkpoint(tmp_path, "a.pt", [0, 0, 0, 0])
+    second = _checkpoint(tmp_path, "b.pt", [1, 1, 1, 1])
+    header = "state,action,reward,next_state,done\n"
+    challenge = tmp_path / "challenge.csv"
+    solution = tmp_path / "solution.csv"
+    challenge.write_text(header + "0,-1,0,0,1\n" * 3 + "1,-1,0,1,1\n")
+    solution.write_text(header + "0,0,0,0,1\n" * 3 + "1,1,0,1,1\n")
+    result = compare_evaluations(
+        [first, second],
+        challenge,
+        solution,
+        bootstrap_replicates=500,
+        bootstrap_seed=17,
+    )
+    assert result["bootstrap"]["unique_states"] == 2
+    assert result["bootstrap"]["resampling_unit"] == "state"
+    interval = result["pairs"][0]["accuracy_difference_interval"]
+    assert interval == {"estimate": 0.5, "lower": -1.0, "upper": 1.0}
+    assert result == compare_evaluations(
+        [first, second],
+        challenge,
+        solution,
+        bootstrap_replicates=500,
+        bootstrap_seed=17,
+    )
+    assert (
+        main(
+            [
+                "compare-evaluations",
+                "--checkpoints",
+                str(first),
+                str(second),
+                "--challenge",
+                str(challenge),
+                "--solution",
+                str(solution),
+                "--bootstrap-replicates",
+                "500",
+                "--bootstrap-seed",
+                "17",
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out) == result
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"bootstrap_replicates": -1}, "bootstrap_replicates"),
+        ({"bootstrap_replicates": True}, "bootstrap_replicates"),
+        ({"bootstrap_seed": -1}, "bootstrap_seed"),
+        ({"confidence_level": 0}, "confidence_level"),
+        ({"confidence_level": 1}, "confidence_level"),
+        ({"confidence_level": float("nan")}, "confidence_level"),
+    ],
+)
+def test_paired_evaluation_rejects_invalid_bootstrap_options(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        compare_evaluations(["a.pt", "b.pt"], "challenge.csv", "solution.csv", **kwargs)
+
+
 @pytest.mark.parametrize("batch_size", [0, -1, True, 1.5])
 def test_paired_evaluation_rejects_invalid_batch_size(tmp_path, batch_size):
     with pytest.raises(ValueError, match="batch_size"):

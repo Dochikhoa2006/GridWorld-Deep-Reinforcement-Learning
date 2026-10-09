@@ -176,6 +176,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
     )
     paired.add_argument("--batch-size", type=int, default=1024)
+    paired.add_argument(
+        "--bootstrap-replicates",
+        type=int,
+        default=0,
+        help="state-cluster bootstrap draws for paired accuracy intervals (default: off)",
+    )
+    paired.add_argument("--bootstrap-seed", type=int, default=0)
+    paired.add_argument("--confidence-level", type=float, default=0.95)
     return parser
 
 
@@ -476,6 +484,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 train_csv=args.train,
                 device=args.device,
                 batch_size=args.batch_size,
+                bootstrap_replicates=args.bootstrap_replicates,
+                bootstrap_seed=args.bootstrap_seed,
+                confidence_level=args.confidence_level,
             )
             print(json.dumps(result, sort_keys=True, allow_nan=False))
         elif args.command == "verify":
