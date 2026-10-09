@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import shutil
+import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -47,26 +50,71 @@ def _load_metrics(run_dir: str | Path) -> tuple[Path, dict[str, Any]]:
 
 
 def generate_report(run_dir: str | Path) -> list[Path]:
-    """Regenerate figures and a Markdown summary using only saved metrics."""
+    """Regenerate derived files, preserving an existing run if rendering fails."""
+
+    directory = Path(run_dir)
+    manifest_path = directory / "manifest.json"
+    if not (manifest_path.exists() or manifest_path.is_symlink()):
+        return _render_report(directory)
+
+    _verify_refreshable(directory)
+    staging = Path(
+        tempfile.mkdtemp(prefix=f".{directory.name}.report-", dir=directory.parent)
+    )
+    try:
+        shutil.copytree(directory, staging, dirs_exist_ok=True, symlinks=True)
+        _render_report(staging)
+        # An unrelated artifact may have changed while the report rendered.
+        _verify_refreshable(directory)
+        backup = (
+            directory.parent / f".{directory.name}.report-backup-{uuid.uuid4().hex}"
+        )
+        directory.replace(backup)
+        try:
+            staging.replace(directory)
+        except Exception:
+            backup.replace(directory)
+            raise
+        shutil.rmtree(backup)
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
+    return [
+        directory / name
+        for name in (
+            "report.png",
+            "confusion_matrices.png",
+            "summary.md",
+            "manifest.json",
+        )
+    ]
+
+
+def _verify_refreshable(directory: Path) -> None:
+    verification = verify_artifacts(directory)
+    blocked = {
+        category: tuple(
+            name
+            for name in getattr(verification, category)
+            if name not in DERIVED_REPORT_FILES
+        )
+        for category in ("missing", "modified", "unexpected")
+    }
+    if any(blocked.values()):
+        raise ValueError(
+            "Cannot refresh a run with invalid artifact integrity: "
+            f"missing={blocked['missing']}, modified={blocked['modified']}, "
+            f"unexpected={blocked['unexpected']}."
+        )
+
+
+def _render_report(run_dir: str | Path) -> list[Path]:
+    """Render report files directly in a private or unmanifested directory."""
 
     directory, metrics = _load_metrics(run_dir)
     manifest_path = directory / "manifest.json"
     if manifest_path.exists() or manifest_path.is_symlink():
-        verification = verify_artifacts(directory)
-        blocked = {
-            category: tuple(
-                name
-                for name in getattr(verification, category)
-                if name not in DERIVED_REPORT_FILES
-            )
-            for category in ("missing", "modified", "unexpected")
-        }
-        if any(blocked.values()):
-            raise ValueError(
-                "Cannot refresh a run with invalid artifact integrity: "
-                f"missing={blocked['missing']}, modified={blocked['modified']}, "
-                f"unexpected={blocked['unexpected']}."
-            )
+        _verify_refreshable(directory)
     algorithms = list(metrics["algorithms"])
     names = [DISPLAY_NAMES.get(name, name) for name in algorithms]
 

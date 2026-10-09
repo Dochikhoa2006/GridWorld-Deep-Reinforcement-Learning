@@ -228,6 +228,67 @@ def test_report_refresh_repairs_derived_files_only(tmp_path) -> None:
     assert (run_dir / "summary.md").read_text().startswith("# Experiment summary")
 
 
+def test_report_refresh_preserves_run_when_rendering_fails(
+    tmp_path, monkeypatch
+) -> None:
+    run_dir = run_experiment(_config(tmp_path))
+    before = {
+        path.relative_to(run_dir): path.read_bytes()
+        for path in run_dir.rglob("*")
+        if path.is_file()
+    }
+    from matplotlib.figure import Figure
+
+    original = Figure.savefig
+    calls = 0
+
+    def fail_second_figure(self, *args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("render failed")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Figure, "savefig", fail_second_figure)
+    with pytest.raises(RuntimeError, match="render failed"):
+        generate_report(run_dir)
+    assert before == {
+        path.relative_to(run_dir): path.read_bytes()
+        for path in run_dir.rglob("*")
+        if path.is_file()
+    }
+    assert verify_artifacts(run_dir).valid
+    assert not list(tmp_path.glob(f".{run_dir.name}.report-*"))
+
+
+def test_report_refresh_restores_run_when_publish_fails(tmp_path, monkeypatch) -> None:
+    run_dir = run_experiment(_config(tmp_path))
+    before = {
+        path.relative_to(run_dir): path.read_bytes()
+        for path in run_dir.rglob("*")
+        if path.is_file()
+    }
+    original = Path.replace
+
+    def fail_stage_publish(self, target):
+        if self.name.startswith(
+            f".{run_dir.name}.report-"
+        ) and not self.name.startswith(f".{run_dir.name}.report-backup-"):
+            raise OSError("publish failed")
+        return original(self, target)
+
+    monkeypatch.setattr(Path, "replace", fail_stage_publish)
+    with pytest.raises(OSError, match="publish failed"):
+        generate_report(run_dir)
+    assert before == {
+        path.relative_to(run_dir): path.read_bytes()
+        for path in run_dir.rglob("*")
+        if path.is_file()
+    }
+    assert verify_artifacts(run_dir).valid
+    assert not list(tmp_path.glob(f".{run_dir.name}.report-*"))
+
+
 def test_step_limited_run_saves_partial_epoch_metadata(tmp_path) -> None:
     config = _config(tmp_path)
     config.training.max_optimizer_steps = 1

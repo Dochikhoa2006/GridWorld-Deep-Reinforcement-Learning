@@ -479,6 +479,10 @@ from saved metrics and can be regenerated without retraining:
 gridworld-rl report --run-dir artifacts/smoke-seed-42
 ```
 
+For an existing manifested run, report refresh renders into a sibling staging
+directory and replaces the run only after all figures, summary, and hashes are
+complete. A rendering or publication failure leaves the original run in place.
+
 Verify a saved experiment or an entire multi-seed benchmark without changing files:
 
 ```bash
