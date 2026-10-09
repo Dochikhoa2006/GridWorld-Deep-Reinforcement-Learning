@@ -283,6 +283,32 @@ def test_transition_diagnostics_report_coverage_and_action_counts() -> None:
     assert diagnostics["state_action_coverage"] == pytest.approx(0.01)
     assert diagnostics["action_counts"] == {"0": 1, "1": 1, "2": 1, "3": 1}
     assert diagnostics["terminal_fraction"] == pytest.approx(0.25)
+    assert diagnostics["dynamics"]["variable_outcome_pairs"] == 0
+    assert diagnostics["dynamics"]["most_variable_pairs"] == []
+
+
+def test_transition_diagnostics_distinguish_variable_outcome_components() -> None:
+    frame = pd.DataFrame(
+        {
+            "state": [0, 0, 0, 0, 1, 1, 2],
+            "action": [0, 0, 0, 0, 1, 1, 0],
+            "reward": [0, 0, 1, 1, 0, 0, 0],
+            "next_state": [1, 1, 1, 2, 2, 2, 2],
+            "done": [False, False, False, True, False, False, True],
+        }
+    )
+    diagnostics = transition_diagnostics(frame, num_states=3, num_actions=2)
+    dynamics = diagnostics["dynamics"]
+    assert dynamics["repeated_state_action_pairs"] == 2
+    assert dynamics["variable_next_state_pairs"] == 1
+    assert dynamics["variable_terminal_pairs"] == 1
+    assert dynamics["variable_reward_pairs"] == 1
+    assert dynamics["variable_outcome_pairs"] == 1
+    assert dynamics["variable_outcome_rows"] == 4
+    assert dynamics["variable_outcome_row_fraction"] == pytest.approx(4 / 7)
+    assert dynamics["most_variable_pairs"] == [
+        {"state": 0, "action": 0, "rows": 4, "distinct_outcomes": 3}
+    ]
 
 
 def test_evaluation_diagnostics_expose_overlap_ambiguity_and_references() -> None:

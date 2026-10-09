@@ -148,9 +148,18 @@ gridworld-rl validate --config configs/default.json
 
 The command checks the configured files, verifies that evaluation rows align, and
 prints training state-action coverage plus exact evaluation/training transition
-overlap. Use `--json` for row counts and the full training and evaluation-split
+overlap. It also counts state-action pairs with multiple recorded transition
+outcomes. Use `--json` for row counts and the full training and evaluation-split
 diagnostics in one machine-readable object. It creates no run artifacts. A missing
 or malformed dataset exits with a contextual error before model training.
+
+The `training_diagnostics.dynamics` object breaks outcome variation into next
+state, terminal flag, and reward components. It reports affected pairs and rows,
+plus up to five pairs with the most distinct recorded outcomes. Rewards are
+compared exactly as validated numeric values. Variation can reflect stochastic
+dynamics or data collection; it is a diagnostic, not a validation failure. Run
+metrics retain these diagnostics, and the experiment summary shows their
+overall prevalence.
 
 ### 4. Run one experiment
 

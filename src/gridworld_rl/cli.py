@@ -404,6 +404,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "Observed state-action coverage: "
                     f"{100 * training['state_action_coverage']:.2f}%."
                 )
+                dynamics = training["dynamics"]
+                print(
+                    "State-action pairs with multiple recorded outcomes: "
+                    f"{dynamics['variable_outcome_pairs']} "
+                    f"({100 * dynamics['variable_outcome_row_fraction']:.2f}% "
+                    "of training rows)."
+                )
                 print(
                     "Exact evaluation/training transition overlap: "
                     f"{100 * evaluation['exact_training_overlap_fraction']:.2f}%."

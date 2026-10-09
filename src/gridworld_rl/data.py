@@ -377,6 +377,31 @@ def transition_diagnostics(
     observed_pairs = checked.loc[:, ["state", "action"]].drop_duplicates()
     action_counts = checked["action"].value_counts()
     rewards = checked["reward"].to_numpy(dtype=np.float64)
+    pair_columns = ["state", "action"]
+    grouped = checked.groupby(pair_columns, sort=True)
+    dynamics = grouped.agg(
+        rows=("state", "size"),
+        next_states=("next_state", "nunique"),
+        terminal_values=("done", "nunique"),
+        reward_values=("reward", "nunique"),
+    )
+    distinct_outcomes = (
+        checked.loc[:, [*pair_columns, "next_state", "done", "reward"]]
+        .drop_duplicates()
+        .groupby(pair_columns, sort=True)
+        .size()
+    )
+    dynamics["outcomes"] = distinct_outcomes
+    variable = dynamics["outcomes"] > 1
+    most_variable = (
+        dynamics.loc[variable]
+        .reset_index()
+        .sort_values(
+            ["outcomes", "rows", "state", "action"],
+            ascending=[False, False, True, True],
+        )
+    )
+    variable_rows = int(dynamics.loc[variable, "rows"].sum())
     return {
         "observed_states": int(checked["state"].nunique()),
         "possible_states": num_states,
@@ -395,6 +420,24 @@ def transition_diagnostics(
             "maximum": float(rewards.max()),
             "mean": float(rewards.mean()),
             "std": float(rewards.std(ddof=0)),
+        },
+        "dynamics": {
+            "repeated_state_action_pairs": int((dynamics["rows"] > 1).sum()),
+            "variable_next_state_pairs": int((dynamics["next_states"] > 1).sum()),
+            "variable_terminal_pairs": int((dynamics["terminal_values"] > 1).sum()),
+            "variable_reward_pairs": int((dynamics["reward_values"] > 1).sum()),
+            "variable_outcome_pairs": int(variable.sum()),
+            "variable_outcome_rows": variable_rows,
+            "variable_outcome_row_fraction": variable_rows / len(checked),
+            "most_variable_pairs": [
+                {
+                    "state": int(row.state),
+                    "action": int(row.action),
+                    "rows": int(row.rows),
+                    "distinct_outcomes": int(row.outcomes),
+                }
+                for row in most_variable.head(5).itertuples(index=False)
+            ],
         },
     }
 

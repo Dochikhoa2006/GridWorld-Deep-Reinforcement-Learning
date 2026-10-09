@@ -219,6 +219,16 @@ def _render_report(run_dir: str | Path) -> list[Path]:
             f"`{metrics['dataset']['diagnostics']['observed_state_action_pairs']}/"
             f"{metrics['dataset']['diagnostics']['possible_state_action_pairs']}`"
         ),
+        *(
+            [
+                "- State-action pairs with multiple recorded outcomes: "
+                f"`{metrics['dataset']['diagnostics']['dynamics']['variable_outcome_pairs']}`",
+                "- Training rows at those pairs: "
+                f"`{100 * metrics['dataset']['diagnostics']['dynamics']['variable_outcome_row_fraction']:.2f}%`",
+            ]
+            if "dynamics" in metrics["dataset"]["diagnostics"]
+            else []
+        ),
         (
             "- Exact evaluation/training transition overlap: "
             f"`{100 * metrics['evaluation_split_diagnostics']['exact_training_overlap_fraction']:.2f}%`"
