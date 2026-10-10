@@ -153,6 +153,9 @@ def test_prediction_can_restrict_to_logged_actions(tmp_path, capsys, compact):
             "unconstrained_action_gap",
             "was_constrained",
             "logged_actions",
+            "eligible_actions",
+            "logged_action_counts",
+            "support_fallback",
             *([] if compact else ["q_0", "q_1", "q_2"]),
         ]
     assert [int(row["state"]) for row in rows] == [4, 0, 1, 2, 3, 4]
@@ -175,8 +178,76 @@ def test_prediction_can_restrict_to_logged_actions(tmp_path, capsys, compact):
         "3.0",
     ]
     assert [row["logged_actions"] for row in rows] == ["", "1;2", "0", "1;2", "0;1", ""]
+    assert [row["eligible_actions"] for row in rows] == [
+        "",
+        "1;2",
+        "0",
+        "1;2",
+        "0;1",
+        "",
+    ]
+    assert [row["logged_action_counts"] for row in rows] == [
+        "",
+        "1:1;2:1",
+        "0:1",
+        "1:1;2:1",
+        "0:1;1:1",
+        "",
+    ]
+    assert all(row["support_fallback"] == "False" for row in rows)
     if not compact:
         assert [float(rows[1][f"q_{i}"]) for i in range(3)] == [3, 1, 0]
+
+
+def test_min_action_count_filters_rare_actions_and_uses_frequency_fallback(tmp_path):
+    checkpoint = _checkpoint(tmp_path)
+    train = _training_csv(tmp_path)
+    with train.open("a") as file:
+        file.write("0,2,0,1,0\n0,2,0,1,0\n")
+    source = tmp_path / "states.csv"
+    source.write_text("state\n0\n1\n4\n")
+    output = tmp_path / "predictions.csv"
+    assert (
+        main(
+            [
+                "predict",
+                "--checkpoint",
+                str(checkpoint),
+                "--input",
+                str(source),
+                "--output",
+                str(output),
+                "--train",
+                str(train),
+                "--min-action-count",
+                "2",
+                "--compact",
+            ]
+        )
+        == 0
+    )
+    with output.open(newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert [row["action"] for row in rows] == ["2", "0", "2"]
+    assert [row["eligible_actions"] for row in rows] == ["2", "0", ""]
+    assert [row["logged_action_counts"] for row in rows] == ["1:1;2:3", "0:1", ""]
+    assert [row["support_fallback"] for row in rows] == ["False", "True", "False"]
+    assert [row["supported_action_gap"] for row in rows] == ["", "", "3.0"]
+
+
+@pytest.mark.parametrize("minimum", [0, -1, True, 1.5])
+def test_invalid_min_action_count_is_rejected(tmp_path, minimum):
+    with pytest.raises(ValueError, match="min_action_count"):
+        predict_csv(
+            "missing.pt", "missing.csv", tmp_path / "out.csv", min_action_count=minimum
+        )
+
+
+def test_min_action_count_requires_training_csv(tmp_path):
+    with pytest.raises(ValueError, match="requires a training CSV"):
+        predict_csv(
+            "missing.pt", "missing.csv", tmp_path / "out.csv", min_action_count=2
+        )
 
 
 def test_changed_training_csv_aborts_supported_prediction(tmp_path, monkeypatch):

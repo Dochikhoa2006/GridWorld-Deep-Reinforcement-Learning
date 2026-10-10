@@ -25,6 +25,8 @@ def _write_batch(
     device: torch.device,
     compact: bool = False,
     support: dict[int, list[int]] | None = None,
+    action_counts: dict[int, dict[int, int]] | None = None,
+    min_action_count: int = 1,
 ) -> None:
     batch = torch.tensor(states, dtype=torch.long, device=device)
     with torch.inference_mode():
@@ -48,11 +50,21 @@ def _write_batch(
             continue
         q_row = values[index]
         logged = support.get(state, [])
-        selected, unrestricted = select_supported_action(q_row, logged)
-        if len(logged) == 1:
+        counts = action_counts[state] if action_counts is not None and logged else {}
+        eligible = [
+            candidate for candidate in logged if counts[candidate] >= min_action_count
+        ]
+        fallback = bool(logged and not eligible)
+        if fallback:
+            maximum = max(counts.values())
+            eligible = [
+                candidate for candidate in logged if counts[candidate] == maximum
+            ]
+        selected, unrestricted = select_supported_action(q_row, eligible)
+        if len(eligible) == 1:
             supported_gap = None
-        elif logged:
-            ranked = sorted((q_row[candidate] for candidate in logged), reverse=True)
+        elif eligible:
+            ranked = sorted((q_row[candidate] for candidate in eligible), reverse=True)
             supported_gap = ranked[0] - ranked[1]
         else:
             supported_gap = gap
@@ -65,6 +77,9 @@ def _write_batch(
                 gap,
                 selected != unrestricted,
                 ";".join(str(candidate) for candidate in logged),
+                ";".join(str(candidate) for candidate in eligible),
+                ";".join(f"{candidate}:{counts[candidate]}" for candidate in logged),
+                fallback,
             ]
             + ([] if compact else q_row)
         )
@@ -79,6 +94,7 @@ def predict_csv(
     batch_size: int = 1024,
     compact: bool = False,
     train_csv: str | Path | None = None,
+    min_action_count: int = 1,
 ) -> Path:
     """Predict actions in input order and publish a new CSV without clobbering."""
 
@@ -88,6 +104,14 @@ def predict_csv(
         or batch_size <= 0
     ):
         raise ValueError("batch_size must be a positive integer.")
+    if (
+        isinstance(min_action_count, bool)
+        or not isinstance(min_action_count, int)
+        or min_action_count <= 0
+    ):
+        raise ValueError("min_action_count must be a positive integer.")
+    if train_csv is None and min_action_count != 1:
+        raise ValueError("min_action_count requires a training CSV.")
     destination = Path(output_csv)
     if destination.exists() or destination.is_symlink():
         raise FileExistsError(f"Prediction output already exists: {destination}")
@@ -102,14 +126,15 @@ def predict_csv(
     train_path = Path(train_csv) if train_csv is not None else None
     train_fingerprint = sha256_file(train_path) if train_path is not None else None
     support = None
+    action_counts = None
     if train_path is not None:
         frame = load_transition_csv(
             train_path, num_states=model.num_states, num_actions=model.num_actions
         )
-        support = {
-            int(state): sorted(set(actions))
-            for state, actions in frame.groupby("state")["action"]
-        }
+        action_counts = {}
+        for (state, action), count in frame.groupby(["state", "action"]).size().items():
+            action_counts.setdefault(int(state), {})[int(action)] = int(count)
+        support = {state: sorted(counts) for state, counts in action_counts.items()}
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = None
     try:
@@ -138,6 +163,9 @@ def predict_csv(
                     "unconstrained_action_gap",
                     "was_constrained",
                     "logged_actions",
+                    "eligible_actions",
+                    "logged_action_counts",
+                    "support_fallback",
                 ]
             )
             writer.writerow(
@@ -186,6 +214,8 @@ def predict_csv(
                         device=selected_device,
                         compact=compact,
                         support=support,
+                        action_counts=action_counts,
+                        min_action_count=min_action_count,
                     )
                     pending.clear()
             if row_count == 0:
@@ -199,6 +229,8 @@ def predict_csv(
                     device=selected_device,
                     compact=compact,
                     support=support,
+                    action_counts=action_counts,
+                    min_action_count=min_action_count,
                 )
         if sha256_file(checkpoint) != fingerprint:
             raise ValueError(

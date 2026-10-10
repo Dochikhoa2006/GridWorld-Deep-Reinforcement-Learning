@@ -160,6 +160,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="restrict actions at observed states to those in this training CSV",
     )
     predict.add_argument(
+        "--min-action-count",
+        type=int,
+        default=1,
+        help="minimum logged count for an eligible action (requires --train)",
+    )
+    predict.add_argument(
         "--compact", action="store_true", help="omit per-action Q-value columns"
     )
     compare = subparsers.add_parser(
@@ -535,6 +541,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 batch_size=args.batch_size,
                 compact=args.compact,
                 train_csv=args.train,
+                min_action_count=args.min_action_count,
             )
             print(f"Predictions exported: {output.resolve()}")
         elif args.command == "compare-checkpoints":

@@ -488,6 +488,12 @@ unconstrained Q gaps. A single logged action has a blank constrained gap because
 there is no second supported action; unseen states fall back to unrestricted
 greedy prediction. `--compact` still omits Q-value columns. The training CSV is
 validated and fingerprinted before and after prediction.
+The supported CSV also lists eligible actions, per-action logged counts, and
+whether a frequency fallback was used. Add `--min-action-count 2` to exclude
+actions logged only once. If every action at an observed state is below the
+threshold, prediction considers the most frequent logged action or actions;
+Q-value and lowest-index tie breaking still apply. Unseen states retain the
+unrestricted greedy fallback.
 
 `manifest.json` records SHA-256 hashes for the other run files. Reports are derived
 from saved metrics and can be regenerated without retraining:
