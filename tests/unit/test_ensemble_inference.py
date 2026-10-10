@@ -128,6 +128,89 @@ def test_supported_ensemble_filters_each_vote_and_reports_fallback(tmp_path):
     assert rows[2]["was_constrained"] == "False"
 
 
+def test_weighted_votes_can_outweigh_member_majority(tmp_path):
+    first = _checkpoint(tmp_path, "first.pt", 2)
+    second = _checkpoint(tmp_path, "second.pt", 1)
+    third = _checkpoint(tmp_path, "third.pt", 2)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n0\n")
+    output = tmp_path / "out.csv"
+    assert (
+        main(
+            [
+                "predict-ensemble",
+                "--checkpoints",
+                str(first),
+                str(second),
+                str(third),
+                "--weights",
+                "1",
+                "4",
+                "1",
+                "--input",
+                str(source),
+                "--output",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    with output.open(newline="") as file:
+        row = next(csv.DictReader(file))
+    assert row["action"] == "1"
+    assert row["votes"] == "1"
+    assert row["vote_weight"] == "4.0"
+    assert row["agreement_fraction"] == str(1 / 3)
+    assert row["agreement_weight_fraction"] == str(4 / 6)
+    assert [row[f"weight_{i}"] for i in range(3)] == ["0.0", "4.0", "2.0"]
+    assert row["unanimous"] == "False"
+
+
+def test_weighted_supported_ensemble_uses_weights_for_raw_and_supported_winners(
+    tmp_path,
+):
+    first = _checkpoint(tmp_path, "first.pt", 2)
+    second = _checkpoint(tmp_path, "second.pt", 1)
+    third = _checkpoint(tmp_path, "third.pt", 2)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n0\n")
+    train = tmp_path / "train.csv"
+    train.write_text("state,action,reward,next_state,done\n0,0,0,1,0\n")
+    output = tmp_path / "out.csv"
+    predict_ensemble_csv(
+        [first, second, third], source, output, train_csv=train, weights=[1, 4, 1]
+    )
+    with output.open(newline="") as file:
+        row = next(csv.DictReader(file))
+    assert row["action"] == "0"
+    assert row["unconstrained_action"] == "1"
+    assert row["was_constrained"] == "True"
+    assert row["vote_weight"] == "6.0"
+    assert row["agreement_weight_fraction"] == "1.0"
+
+
+@pytest.mark.parametrize(
+    "weights",
+    [
+        [1],
+        [1, 0],
+        [1, -1],
+        [1, float("nan")],
+        [1, float("inf")],
+        [1e308, 1e308],
+        [True, 1],
+    ],
+)
+def test_invalid_vote_weights_are_rejected(tmp_path, weights):
+    with pytest.raises(ValueError, match="weights"):
+        predict_ensemble_csv(
+            ["first.pt", "second.pt"],
+            "states.csv",
+            tmp_path / "out.csv",
+            weights=weights,
+        )
+
+
 def test_supported_ensemble_detects_changed_training_csv(tmp_path, monkeypatch):
     import gridworld_rl.ensemble_inference as ensemble
 

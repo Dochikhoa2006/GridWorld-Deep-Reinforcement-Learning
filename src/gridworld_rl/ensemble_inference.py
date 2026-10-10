@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import csv
+import math
 import os
 import tempfile
+from numbers import Real
 from pathlib import Path
 
 import torch
@@ -29,6 +31,7 @@ def _write_ensemble_batch(
     num_actions,
     action_counts=None,
     min_action_count=1,
+    weights=None,
 ):
     batch = torch.tensor(states, dtype=torch.long, device=device)
     member_values = []
@@ -48,7 +51,22 @@ def _write_ensemble_batch(
         eligible, fallback = eligible_prediction_actions(counts, min_action_count)
         actions = [select_supported_action(row, eligible)[0] for row in q_rows]
         votes = [actions.count(action) for action in range(num_actions)]
-        winner = max(range(num_actions), key=votes.__getitem__)
+        weighted_votes = (
+            [
+                math.fsum(
+                    weight
+                    for action, weight in zip(actions, weights, strict=True)
+                    if action == candidate
+                )
+                for candidate in range(num_actions)
+            ]
+            if weights is not None
+            else None
+        )
+        winner = max(
+            range(num_actions),
+            key=(weighted_votes if weighted_votes is not None else votes).__getitem__,
+        )
         winning_votes = votes[winner]
         row = [
             state,
@@ -58,8 +76,21 @@ def _write_ensemble_batch(
             winning_votes == len(models),
             ";".join(map(str, actions)),
         ]
+        if weighted_votes is not None:
+            row.extend([weighted_votes[winner], weighted_votes[winner] / sum(weights)])
         if action_counts is not None:
-            raw_votes = [raw_actions.count(action) for action in range(num_actions)]
+            raw_votes = (
+                [
+                    math.fsum(
+                        weight
+                        for action, weight in zip(raw_actions, weights, strict=True)
+                        if action == candidate
+                    )
+                    for candidate in range(num_actions)
+                ]
+                if weights is not None
+                else [raw_actions.count(action) for action in range(num_actions)]
+            )
             raw_winner = max(range(num_actions), key=raw_votes.__getitem__)
             row.extend(
                 [
@@ -72,7 +103,9 @@ def _write_ensemble_batch(
                     fallback,
                 ]
             )
-        writer.writerow([*row, *votes])
+        writer.writerow(
+            [*row, *votes, *([] if weighted_votes is None else weighted_votes)]
+        )
 
 
 def predict_ensemble_csv(
@@ -84,11 +117,26 @@ def predict_ensemble_csv(
     batch_size: int = 1024,
     train_csv: str | Path | None = None,
     min_action_count: int = 1,
+    weights: list[float] | None = None,
 ) -> Path:
     """Write a majority-vote CSV in input order, preserving duplicate states."""
 
     if len(checkpoints) < 2:
         raise ValueError("At least two checkpoints are required.")
+    if weights is not None and (
+        len(weights) != len(checkpoints)
+        or any(
+            isinstance(weight, bool)
+            or not isinstance(weight, Real)
+            or not math.isfinite(weight)
+            or weight <= 0
+            for weight in weights
+        )
+        or not math.isfinite(sum(weights))
+    ):
+        raise ValueError(
+            "weights must contain one positive finite value per checkpoint with a finite total."
+        )
     if (
         isinstance(batch_size, bool)
         or not isinstance(batch_size, int)
@@ -151,6 +199,8 @@ def predict_ensemble_csv(
                 "unanimous",
                 "member_actions",
             ]
+            if weights is not None:
+                header.extend(["vote_weight", "agreement_weight_fraction"])
             if action_counts is not None:
                 header.extend(
                     [
@@ -164,7 +214,13 @@ def predict_ensemble_csv(
                     ]
                 )
             writer.writerow(
-                header + [f"votes_{action}" for action in range(num_actions)]
+                header
+                + [f"votes_{action}" for action in range(num_actions)]
+                + (
+                    []
+                    if weights is None
+                    else [f"weight_{action}" for action in range(num_actions)]
+                )
             )
             for start, states in iter_state_batches(source, num_states, batch_size):
                 _write_ensemble_batch(
@@ -177,6 +233,7 @@ def predict_ensemble_csv(
                     num_actions,
                     action_counts,
                     min_action_count,
+                    weights,
                 )
         for path, fingerprint in zip(paths, fingerprints, strict=True):
             if sha256_file(path) != fingerprint:

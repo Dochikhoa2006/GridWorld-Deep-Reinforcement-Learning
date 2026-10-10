@@ -517,6 +517,12 @@ using the same frequency fallback as `predict`. The supported ensemble CSV shows
 both constrained and unrestricted member choices, the unrestricted winner,
 logged counts, eligible actions, and whether the fallback was used. Unseen states
 use unrestricted votes. The training CSV is validated and fingerprinted.
+Use `--weights 1 2 1` to give checkpoints different positive vote weights in
+the same order as `--checkpoints`. Weighted totals decide the winner, with the
+lowest action index breaking ties. The CSV retains unweighted vote counts and
+adds each action's weight total, the winner's weight, and its share of total
+weight. With `--train`, both constrained and unrestricted winners use the same
+weights. Weights are not model probabilities or accuracy estimates.
 
 `manifest.json` records SHA-256 hashes for the other run files. Reports are derived
 from saved metrics and can be regenerated without retraining:

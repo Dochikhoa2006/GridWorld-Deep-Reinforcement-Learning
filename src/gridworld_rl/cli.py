@@ -174,6 +174,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="majority-vote CSV predictions from multiple checkpoints",
     )
     ensemble.add_argument("--checkpoints", nargs="+", required=True)
+    ensemble.add_argument(
+        "--weights",
+        nargs="+",
+        type=float,
+        help="positive vote weights in the same order as --checkpoints",
+    )
     ensemble.add_argument("--input", required=True, help="CSV with one state column")
     ensemble.add_argument("--output", required=True, help="new predictions CSV file")
     ensemble.add_argument(
@@ -576,6 +582,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 batch_size=args.batch_size,
                 train_csv=args.train,
                 min_action_count=args.min_action_count,
+                weights=args.weights,
             )
             print(f"Ensemble predictions exported: {output.resolve()}")
         elif args.command == "compare-checkpoints":
