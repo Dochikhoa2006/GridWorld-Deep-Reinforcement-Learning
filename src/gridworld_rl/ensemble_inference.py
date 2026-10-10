@@ -32,6 +32,7 @@ def _write_ensemble_batch(
     action_counts=None,
     min_action_count=1,
     weights=None,
+    abstain_below=None,
 ):
     batch = torch.tensor(states, dtype=torch.long, device=device)
     member_values = []
@@ -68,14 +69,22 @@ def _write_ensemble_batch(
             key=(weighted_votes if weighted_votes is not None else votes).__getitem__,
         )
         winning_votes = votes[winner]
+        agreement = (
+            weighted_votes[winner] / sum(weights)
+            if weighted_votes is not None
+            else winning_votes / len(models)
+        )
+        abstained = abstain_below is not None and agreement < abstain_below
         row = [
             state,
-            winner,
+            "" if abstained else winner,
             winning_votes,
             winning_votes / len(models),
             winning_votes == len(models),
             ";".join(map(str, actions)),
         ]
+        if abstain_below is not None:
+            row.extend([winner, abstained])
         if weighted_votes is not None:
             row.extend([weighted_votes[winner], weighted_votes[winner] / sum(weights)])
         if action_counts is not None:
@@ -118,11 +127,19 @@ def predict_ensemble_csv(
     train_csv: str | Path | None = None,
     min_action_count: int = 1,
     weights: list[float] | None = None,
+    abstain_below: float | None = None,
 ) -> Path:
     """Write a majority-vote CSV in input order, preserving duplicate states."""
 
     if len(checkpoints) < 2:
         raise ValueError("At least two checkpoints are required.")
+    if abstain_below is not None and (
+        isinstance(abstain_below, bool)
+        or not isinstance(abstain_below, Real)
+        or not math.isfinite(abstain_below)
+        or not 0 < abstain_below <= 1
+    ):
+        raise ValueError("abstain_below must be a finite number in (0, 1].")
     if weights is not None and (
         len(weights) != len(checkpoints)
         or any(
@@ -199,6 +216,8 @@ def predict_ensemble_csv(
                 "unanimous",
                 "member_actions",
             ]
+            if abstain_below is not None:
+                header.extend(["suggested_action", "abstained"])
             if weights is not None:
                 header.extend(["vote_weight", "agreement_weight_fraction"])
             if action_counts is not None:
@@ -234,6 +253,7 @@ def predict_ensemble_csv(
                     action_counts,
                     min_action_count,
                     weights,
+                    abstain_below,
                 )
         for path, fingerprint in zip(paths, fingerprints, strict=True):
             if sha256_file(path) != fingerprint:

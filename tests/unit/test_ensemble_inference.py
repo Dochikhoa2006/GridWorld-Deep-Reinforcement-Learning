@@ -189,6 +189,82 @@ def test_weighted_supported_ensemble_uses_weights_for_raw_and_supported_winners(
     assert row["agreement_weight_fraction"] == "1.0"
 
 
+def test_ensemble_abstains_below_member_agreement_threshold(tmp_path):
+    first = _checkpoint(tmp_path, "first.pt", 2)
+    second = _checkpoint(tmp_path, "second.pt", 1)
+    third = _checkpoint(tmp_path, "third.pt", 2)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n0\n")
+    output = tmp_path / "out.csv"
+    assert (
+        main(
+            [
+                "predict-ensemble",
+                "--checkpoints",
+                str(first),
+                str(second),
+                str(third),
+                "--input",
+                str(source),
+                "--output",
+                str(output),
+                "--abstain-below",
+                "0.75",
+            ]
+        )
+        == 0
+    )
+    with output.open(newline="") as file:
+        row = next(csv.DictReader(file))
+    assert row["action"] == ""
+    assert row["suggested_action"] == "2"
+    assert row["abstained"] == "True"
+    assert row["votes"] == "2"
+    accepted = tmp_path / "accepted.csv"
+    predict_ensemble_csv([first, second, third], source, accepted, abstain_below=2 / 3)
+    with accepted.open(newline="") as file:
+        row = next(csv.DictReader(file))
+    assert row["action"] == "2"
+    assert row["abstained"] == "False"
+
+
+def test_weighted_supported_ensemble_abstains_on_weight_share(tmp_path):
+    first = _checkpoint(tmp_path, "first.pt", 2)
+    second = _checkpoint(tmp_path, "second.pt", 1)
+    third = _checkpoint(tmp_path, "third.pt", 2)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n0\n1\n")
+    train = tmp_path / "train.csv"
+    train.write_text("state,action,reward,next_state,done\n0,0,0,1,0\n")
+    output = tmp_path / "out.csv"
+    predict_ensemble_csv(
+        [first, second, third],
+        source,
+        output,
+        train_csv=train,
+        weights=[1, 4, 1],
+        abstain_below=0.75,
+    )
+    with output.open(newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert [row["action"] for row in rows] == ["0", ""]
+    assert [row["suggested_action"] for row in rows] == ["0", "1"]
+    assert [row["abstained"] for row in rows] == ["False", "True"]
+    assert rows[1]["agreement_weight_fraction"] == str(4 / 6)
+    assert rows[1]["agreement_fraction"] == str(1 / 3)
+
+
+@pytest.mark.parametrize("threshold", [0, -1, 1.1, float("nan"), float("inf"), True])
+def test_invalid_abstention_threshold_is_rejected(tmp_path, threshold):
+    with pytest.raises(ValueError, match="abstain_below"):
+        predict_ensemble_csv(
+            ["first.pt", "second.pt"],
+            "states.csv",
+            tmp_path / "out.csv",
+            abstain_below=threshold,
+        )
+
+
 @pytest.mark.parametrize(
     "weights",
     [

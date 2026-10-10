@@ -523,6 +523,12 @@ lowest action index breaking ties. The CSV retains unweighted vote counts and
 adds each action's weight total, the winner's weight, and its share of total
 weight. With `--train`, both constrained and unrestricted winners use the same
 weights. Weights are not model probabilities or accuracy estimates.
+Add `--abstain-below 0.75` to leave `action` blank when the winning vote share
+is below the threshold. The CSV then includes `suggested_action` and `abstained`
+so every row still exposes the winner and its vote details. With `--weights`,
+the threshold uses weighted vote share; otherwise it uses member vote share.
+The threshold is inclusive: a row meeting it is accepted. Abstention reflects
+ensemble disagreement, not a calibrated probability of error.
 
 `manifest.json` records SHA-256 hashes for the other run files. Reports are derived
 from saved metrics and can be regenerated without retraining:

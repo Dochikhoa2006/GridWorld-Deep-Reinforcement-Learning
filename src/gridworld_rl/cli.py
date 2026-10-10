@@ -187,6 +187,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ensemble.add_argument("--batch-size", type=int, default=1024)
     ensemble.add_argument(
+        "--abstain-below",
+        type=float,
+        help="leave action blank when the winning vote share is below this threshold",
+    )
+    ensemble.add_argument(
         "--train", help="restrict each model vote to logged actions at observed states"
     )
     ensemble.add_argument(
@@ -583,6 +588,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 train_csv=args.train,
                 min_action_count=args.min_action_count,
                 weights=args.weights,
+                abstain_below=args.abstain_below,
             )
             print(f"Ensemble predictions exported: {output.resolve()}")
         elif args.command == "compare-checkpoints":
