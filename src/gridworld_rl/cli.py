@@ -180,6 +180,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
     )
     ensemble.add_argument("--batch-size", type=int, default=1024)
+    ensemble.add_argument(
+        "--train", help="restrict each model vote to logged actions at observed states"
+    )
+    ensemble.add_argument(
+        "--min-action-count",
+        type=int,
+        default=1,
+        help="minimum logged count for an eligible action (requires --train)",
+    )
     compare = subparsers.add_parser(
         "compare-checkpoints",
         help="compare saved greedy policies across every discrete state",
@@ -565,6 +574,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.output,
                 device=args.device,
                 batch_size=args.batch_size,
+                train_csv=args.train,
+                min_action_count=args.min_action_count,
             )
             print(f"Ensemble predictions exported: {output.resolve()}")
         elif args.command == "compare-checkpoints":

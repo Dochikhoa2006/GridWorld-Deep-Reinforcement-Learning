@@ -511,6 +511,12 @@ order, and per-action vote counts. Tied votes choose the lowest action index.
 Each checkpoint and the input CSV are fingerprinted before and after streaming
 inference, and an existing output is never replaced. Agreement indicates model
 consensus, not prediction correctness.
+Add `--train Gridworld-10_Dataset/train.csv` to restrict each checkpoint's vote
+to logged actions at observed states. `--min-action-count 2` filters rare actions
+using the same frequency fallback as `predict`. The supported ensemble CSV shows
+both constrained and unrestricted member choices, the unrestricted winner,
+logged counts, eligible actions, and whether the fallback was used. Unseen states
+use unrestricted votes. The training CSV is validated and fingerprinted.
 
 `manifest.json` records SHA-256 hashes for the other run files. Reports are derived
 from saved metrics and can be regenerated without retraining:

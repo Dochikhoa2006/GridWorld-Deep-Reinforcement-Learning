@@ -71,6 +71,85 @@ def test_cli_ensemble_majority_and_tie_preserve_input_order(tmp_path, capsys):
         assert [row["action"] for row in csv.DictReader(file)] == ["1"] * 3
 
 
+def test_supported_ensemble_filters_each_vote_and_reports_fallback(tmp_path):
+    first = _checkpoint(tmp_path, "first.pt", 2)
+    second = _checkpoint(tmp_path, "second.pt", 1)
+    third = _checkpoint(tmp_path, "third.pt", 2)
+    train = tmp_path / "train.csv"
+    train.write_text(
+        "state,action,reward,next_state,done\n"
+        "0,0,0,1,0\n0,1,0,1,0\n0,1,0,1,0\n0,1,0,1,0\n"
+        "1,0,0,2,0\n"
+    )
+    source = tmp_path / "states.csv"
+    source.write_text("state\n0\n1\n4\n0\n")
+    output = tmp_path / "out.csv"
+    assert (
+        main(
+            [
+                "predict-ensemble",
+                "--checkpoints",
+                str(first),
+                str(second),
+                str(third),
+                "--input",
+                str(source),
+                "--output",
+                str(output),
+                "--train",
+                str(train),
+                "--min-action-count",
+                "2",
+                "--batch-size",
+                "2",
+            ]
+        )
+        == 0
+    )
+    with output.open(newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert [row["action"] for row in rows] == ["1", "0", "2", "1"]
+    assert [row["unconstrained_action"] for row in rows] == ["2"] * 4
+    assert [row["member_actions"] for row in rows] == [
+        "1;1;1",
+        "0;0;0",
+        "2;1;2",
+        "1;1;1",
+    ]
+    assert rows[0]["unconstrained_member_actions"] == "2;1;2"
+    assert [row["support_fallback"] for row in rows] == [
+        "False",
+        "True",
+        "False",
+        "False",
+    ]
+    assert [row["eligible_actions"] for row in rows] == ["1", "0", "", "1"]
+    assert rows[0]["logged_action_counts"] == "0:1;1:3"
+    assert rows[2]["was_constrained"] == "False"
+
+
+def test_supported_ensemble_detects_changed_training_csv(tmp_path, monkeypatch):
+    import gridworld_rl.ensemble_inference as ensemble
+
+    first = _checkpoint(tmp_path, "first.pt", 0)
+    second = _checkpoint(tmp_path, "second.pt", 1)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n0\n")
+    train = tmp_path / "train.csv"
+    train.write_text("state,action,reward,next_state,done\n0,0,0,1,0\n")
+    original = ensemble._write_ensemble_batch
+
+    def write_then_change(*args):
+        original(*args)
+        train.write_text(train.read_text() + "0,1,0,1,0\n")
+
+    monkeypatch.setattr(ensemble, "_write_ensemble_batch", write_then_change)
+    output = tmp_path / "out.csv"
+    with pytest.raises(ValueError, match="Training CSV changed"):
+        predict_ensemble_csv([first, second], source, output, train_csv=train)
+    assert not output.exists()
+
+
 def test_ensemble_rejects_incompatible_or_duplicate_checkpoints(tmp_path):
     first = _checkpoint(tmp_path, "first.pt", 0)
     other = _checkpoint(tmp_path, "other.pt", 1, num_states=6)

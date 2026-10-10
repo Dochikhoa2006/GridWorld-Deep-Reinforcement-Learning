@@ -10,13 +10,28 @@ from pathlib import Path
 import torch
 
 from .checkpoints import load_checkpoint
-from .inference import iter_state_batches
+from .inference import (
+    eligible_prediction_actions,
+    iter_state_batches,
+    load_prediction_support,
+)
 from .reproducibility import resolve_device, sha256_file
+from .supported_policy import select_supported_action
 
 
-def _write_ensemble_batch(writer, models, paths, states, start, device, num_actions):
+def _write_ensemble_batch(
+    writer,
+    models,
+    paths,
+    states,
+    start,
+    device,
+    num_actions,
+    action_counts=None,
+    min_action_count=1,
+):
     batch = torch.tensor(states, dtype=torch.long, device=device)
-    member_actions = []
+    member_values = []
     with torch.inference_mode():
         for model, path in zip(models, paths, strict=True):
             values = model(batch)
@@ -25,23 +40,39 @@ def _write_ensemble_batch(writer, models, paths, states, start, device, num_acti
                     f"Checkpoint {path} produces non-finite Q-values at input rows "
                     f"{start}..{start + len(states) - 1}."
                 )
-            member_actions.append(values.argmax(dim=1).cpu().tolist())
+            member_values.append(values.cpu().tolist())
     for index, state in enumerate(states):
-        actions = [member[index] for member in member_actions]
+        q_rows = [member[index] for member in member_values]
+        raw_actions = [max(range(num_actions), key=row.__getitem__) for row in q_rows]
+        counts = action_counts.get(state, {}) if action_counts is not None else {}
+        eligible, fallback = eligible_prediction_actions(counts, min_action_count)
+        actions = [select_supported_action(row, eligible)[0] for row in q_rows]
         votes = [actions.count(action) for action in range(num_actions)]
         winner = max(range(num_actions), key=votes.__getitem__)
         winning_votes = votes[winner]
-        writer.writerow(
-            [
-                state,
-                winner,
-                winning_votes,
-                winning_votes / len(models),
-                winning_votes == len(models),
-                ";".join(map(str, actions)),
-                *votes,
-            ]
-        )
+        row = [
+            state,
+            winner,
+            winning_votes,
+            winning_votes / len(models),
+            winning_votes == len(models),
+            ";".join(map(str, actions)),
+        ]
+        if action_counts is not None:
+            raw_votes = [raw_actions.count(action) for action in range(num_actions)]
+            raw_winner = max(range(num_actions), key=raw_votes.__getitem__)
+            row.extend(
+                [
+                    raw_winner,
+                    ";".join(map(str, raw_actions)),
+                    winner != raw_winner,
+                    ";".join(map(str, sorted(counts))),
+                    ";".join(map(str, eligible)),
+                    ";".join(f"{action}:{counts[action]}" for action in sorted(counts)),
+                    fallback,
+                ]
+            )
+        writer.writerow([*row, *votes])
 
 
 def predict_ensemble_csv(
@@ -51,6 +82,8 @@ def predict_ensemble_csv(
     *,
     device: str = "cpu",
     batch_size: int = 1024,
+    train_csv: str | Path | None = None,
+    min_action_count: int = 1,
 ) -> Path:
     """Write a majority-vote CSV in input order, preserving duplicate states."""
 
@@ -62,6 +95,14 @@ def predict_ensemble_csv(
         or batch_size <= 0
     ):
         raise ValueError("batch_size must be a positive integer.")
+    if (
+        isinstance(min_action_count, bool)
+        or not isinstance(min_action_count, int)
+        or min_action_count <= 0
+    ):
+        raise ValueError("min_action_count must be a positive integer.")
+    if train_csv is None and min_action_count != 1:
+        raise ValueError("min_action_count requires a training CSV.")
     paths = [Path(path) for path in checkpoints]
     if len({path.resolve() for path in paths}) != len(paths):
         raise ValueError("Checkpoint paths must be distinct.")
@@ -81,6 +122,13 @@ def predict_ensemble_csv(
     ):
         raise ValueError("Checkpoints must have identical state and action dimensions.")
     source_fingerprint = sha256_file(source)
+    train_path = Path(train_csv) if train_csv is not None else None
+    train_fingerprint = sha256_file(train_path) if train_path is not None else None
+    action_counts = (
+        load_prediction_support(train_path, num_states, num_actions)
+        if train_path is not None
+        else None
+    )
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = None
     try:
@@ -95,20 +143,40 @@ def predict_ensemble_csv(
         ) as temporary:
             temporary_path = Path(temporary.name)
             writer = csv.writer(temporary)
+            header = [
+                "state",
+                "action",
+                "votes",
+                "agreement_fraction",
+                "unanimous",
+                "member_actions",
+            ]
+            if action_counts is not None:
+                header.extend(
+                    [
+                        "unconstrained_action",
+                        "unconstrained_member_actions",
+                        "was_constrained",
+                        "logged_actions",
+                        "eligible_actions",
+                        "logged_action_counts",
+                        "support_fallback",
+                    ]
+                )
             writer.writerow(
-                [
-                    "state",
-                    "action",
-                    "votes",
-                    "agreement_fraction",
-                    "unanimous",
-                    "member_actions",
-                ]
-                + [f"votes_{action}" for action in range(num_actions)]
+                header + [f"votes_{action}" for action in range(num_actions)]
             )
             for start, states in iter_state_batches(source, num_states, batch_size):
                 _write_ensemble_batch(
-                    writer, models, paths, states, start, selected_device, num_actions
+                    writer,
+                    models,
+                    paths,
+                    states,
+                    start,
+                    selected_device,
+                    num_actions,
+                    action_counts,
+                    min_action_count,
                 )
         for path, fingerprint in zip(paths, fingerprints, strict=True):
             if sha256_file(path) != fingerprint:
@@ -116,6 +184,10 @@ def predict_ensemble_csv(
         if sha256_file(source) != source_fingerprint:
             raise ValueError(
                 "State CSV changed during prediction; retry with a stable file."
+            )
+        if train_path is not None and sha256_file(train_path) != train_fingerprint:
+            raise ValueError(
+                "Training CSV changed during prediction; retry with a stable file."
             )
         os.link(temporary_path, destination)
     except (UnicodeError, csv.Error) as exc:

@@ -16,6 +16,32 @@ from .reproducibility import resolve_device, sha256_file
 from .supported_policy import select_supported_action
 
 
+def load_prediction_support(train_path: Path, num_states: int, num_actions: int):
+    """Count logged state-action pairs for supported CSV prediction."""
+
+    frame = load_transition_csv(
+        train_path, num_states=num_states, num_actions=num_actions
+    )
+    counts: dict[int, dict[int, int]] = {}
+    for (state, action), count in frame.groupby(["state", "action"]).size().items():
+        counts.setdefault(int(state), {})[int(action)] = int(count)
+    return counts
+
+
+def eligible_prediction_actions(
+    counts: dict[int, int], min_action_count: int
+) -> tuple[list[int], bool]:
+    """Keep sufficiently logged actions, falling back to the most frequent."""
+
+    logged = sorted(counts)
+    eligible = [action for action in logged if counts[action] >= min_action_count]
+    fallback = bool(logged and not eligible)
+    if fallback:
+        maximum = max(counts.values())
+        eligible = [action for action in logged if counts[action] == maximum]
+    return eligible, fallback
+
+
 def _write_batch(
     writer,
     model: torch.nn.Module,
@@ -51,15 +77,7 @@ def _write_batch(
         q_row = values[index]
         logged = support.get(state, [])
         counts = action_counts[state] if action_counts is not None and logged else {}
-        eligible = [
-            candidate for candidate in logged if counts[candidate] >= min_action_count
-        ]
-        fallback = bool(logged and not eligible)
-        if fallback:
-            maximum = max(counts.values())
-            eligible = [
-                candidate for candidate in logged if counts[candidate] == maximum
-            ]
+        eligible, fallback = eligible_prediction_actions(counts, min_action_count)
         selected, unrestricted = select_supported_action(q_row, eligible)
         if len(eligible) == 1:
             supported_gap = None
@@ -166,12 +184,9 @@ def predict_csv(
     support = None
     action_counts = None
     if train_path is not None:
-        frame = load_transition_csv(
-            train_path, num_states=model.num_states, num_actions=model.num_actions
+        action_counts = load_prediction_support(
+            train_path, model.num_states, model.num_actions
         )
-        action_counts = {}
-        for (state, action), count in frame.groupby(["state", "action"]).size().items():
-            action_counts.setdefault(int(state), {})[int(action)] = int(count)
         support = {state: sorted(counts) for state, counts in action_counts.items()}
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = None
