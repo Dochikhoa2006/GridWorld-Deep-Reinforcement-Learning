@@ -196,6 +196,73 @@ def test_supported_policy_evaluation_rejects_changed_input(tmp_path, monkeypatch
         evaluate_supported_policy(checkpoint, train, challenge, solution)
 
 
+def test_supported_policy_state_cluster_interval_is_reproducible(tmp_path, capsys):
+    checkpoint, train = _inputs(tmp_path)
+    header = "state,action,reward,next_state,done\n"
+    challenge = tmp_path / "challenge.csv"
+    solution = tmp_path / "solution.csv"
+    challenge.write_text(header + "0,-1,0,1,0\n" * 3 + "1,-1,0,2,0\n")
+    solution.write_text(header + "0,1,0,1,0\n" * 3 + "1,1,0,2,0\n")
+    result = evaluate_supported_policy(
+        checkpoint,
+        train,
+        challenge,
+        solution,
+        bootstrap_replicates=500,
+        bootstrap_seed=17,
+    )
+    assert result["bootstrap"]["unique_states"] == 2
+    assert result["paired"]["accuracy_difference_interval"] == {
+        "estimate": 0.5,
+        "lower": -1.0,
+        "upper": 1.0,
+    }
+    assert result == evaluate_supported_policy(
+        checkpoint,
+        train,
+        challenge,
+        solution,
+        bootstrap_replicates=500,
+        bootstrap_seed=17,
+    )
+    assert (
+        main(
+            [
+                "evaluate-supported-policy",
+                "--checkpoint",
+                str(checkpoint),
+                "--train",
+                str(train),
+                "--challenge",
+                str(challenge),
+                "--solution",
+                str(solution),
+                "--bootstrap-replicates",
+                "500",
+                "--bootstrap-seed",
+                "17",
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out) == result
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"bootstrap_replicates": -1}, "bootstrap_replicates"),
+        ({"bootstrap_replicates": True}, "bootstrap_replicates"),
+        ({"bootstrap_seed": -1}, "bootstrap_seed"),
+        ({"confidence_level": 0}, "confidence_level"),
+        ({"confidence_level": float("nan")}, "confidence_level"),
+    ],
+)
+def test_supported_policy_rejects_invalid_bootstrap_options(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        evaluate_supported_policy("a.pt", "train.csv", "c.csv", "s.csv", **kwargs)
+
+
 @pytest.mark.parametrize("batch_size", [0, -1, True, 1.5])
 def test_supported_policy_rejects_bad_batch_size(tmp_path, batch_size):
     with pytest.raises(ValueError, match="batch_size"):

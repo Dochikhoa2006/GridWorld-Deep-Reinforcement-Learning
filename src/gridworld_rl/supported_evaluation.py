@@ -17,6 +17,7 @@ from .data import (
 from .evaluation import classification_metrics, overlap_sliced_agreement
 from .reproducibility import resolve_device, sha256_file
 from .supported_policy import select_supported_action
+from .uncertainty import state_cluster_intervals, validate_bootstrap_options
 
 
 def evaluate_supported_policy(
@@ -27,6 +28,9 @@ def evaluate_supported_policy(
     *,
     device: str = "cpu",
     batch_size: int = 1024,
+    bootstrap_replicates: int = 0,
+    bootstrap_seed: int = 0,
+    confidence_level: float = 0.95,
 ) -> dict[str, Any]:
     """Compare constrained and original policy agreement on aligned rows."""
 
@@ -36,6 +40,7 @@ def evaluate_supported_policy(
         or batch_size <= 0
     ):
         raise ValueError("batch_size must be a positive integer.")
+    validate_bootstrap_options(bootstrap_replicates, bootstrap_seed, confidence_level)
     paths = {
         "checkpoint": Path(checkpoint),
         "train": Path(train_csv),
@@ -141,6 +146,18 @@ def evaluate_supported_policy(
             num_actions=model.num_actions,
         ),
     }
+    if bootstrap_replicates:
+        intervals, metadata = state_cluster_intervals(
+            states,
+            [original_correct, constrained_correct],
+            [(1, 0)],
+            replicates=bootstrap_replicates,
+            seed=bootstrap_seed,
+            confidence_level=float(confidence_level),
+            estimand="supported row accuracy minus unconstrained row accuracy",
+        )
+        result["paired"]["accuracy_difference_interval"] = intervals[0]
+        result["bootstrap"] = metadata
     for name, path in paths.items():
         if sha256_file(path) != hashes[name]:
             raise ValueError(

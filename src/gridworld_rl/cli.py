@@ -141,6 +141,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
     )
     supported_eval.add_argument("--batch-size", type=int, default=1024)
+    supported_eval.add_argument("--bootstrap-replicates", type=int, default=0)
+    supported_eval.add_argument("--bootstrap-seed", type=int, default=0)
+    supported_eval.add_argument("--confidence-level", type=float, default=0.95)
     predict = subparsers.add_parser(
         "predict", help="predict actions for states listed in a CSV file"
     )
@@ -485,6 +488,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.solution,
                 device=args.device,
                 batch_size=args.batch_size,
+                bootstrap_replicates=args.bootstrap_replicates,
+                bootstrap_seed=args.bootstrap_seed,
+                confidence_level=args.confidence_level,
             )
             print(json.dumps(result, sort_keys=True, allow_nan=False))
         elif args.command == "inspect-checkpoint":

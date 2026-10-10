@@ -635,6 +635,12 @@ counts, and paired correct/incorrect counts. Input files are validated and
 fingerprinted before and after evaluation. The comparison measures agreement
 with solution labels, not environment return; overlap diagnostics accompany
 the scores so training exposure remains visible.
+Add `--bootstrap-replicates 1000 --bootstrap-seed 42` to include a percentile
+interval for the supported-minus-unconstrained row-accuracy difference.
+Resampling uses distinct state IDs and retains all rows for each sampled state.
+`--confidence-level` defaults to `0.95`. The interval describes sampling
+variation on this split; it does not turn overlapping evaluation data into
+out-of-sample evidence.
 
 ### Compare saved checkpoints
 
