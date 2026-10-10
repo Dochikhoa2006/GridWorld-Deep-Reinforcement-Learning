@@ -619,6 +619,23 @@ the lowest action index. Checkpoint and training-file hashes are recorded and
 rechecked before a new output file is published. This is a support-constrained
 decision rule, not evidence that the resulting policy is safe or optimal.
 
+To measure the effect on the provided evaluation split, run:
+
+```bash
+gridworld-rl evaluate-supported-policy \
+  --checkpoint artifacts/smoke-seed-42/checkpoints/cql.pt \
+  --train Gridworld-10_Dataset/train.csv \
+  --challenge Gridworld-10_Dataset/eval_challenge.csv \
+  --solution Gridworld-10_Dataset/eval_solution.csv
+```
+
+This compares the original and support-constrained policies on identical rows.
+It reports classification metrics, overlap-sliced agreement, changed action
+counts, and paired correct/incorrect counts. Input files are validated and
+fingerprinted before and after evaluation. The comparison measures agreement
+with solution labels, not environment return; overlap diagnostics accompany
+the scores so training exposure remains visible.
+
 ### Compare saved checkpoints
 
 Compare two or more checkpoints over every discrete state, without evaluation

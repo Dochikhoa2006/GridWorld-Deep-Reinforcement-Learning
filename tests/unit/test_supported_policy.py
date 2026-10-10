@@ -8,6 +8,7 @@ import torch
 from gridworld_rl.cli import main
 from gridworld_rl.models import QNetwork
 from gridworld_rl.reproducibility import sha256_file
+from gridworld_rl.supported_evaluation import evaluate_supported_policy
 from gridworld_rl.supported_policy import export_supported_policy
 
 
@@ -118,6 +119,81 @@ def test_supported_policy_rejects_changed_training_csv(tmp_path, monkeypatch):
         export_supported_policy(checkpoint, train, output)
     assert not output.exists()
     assert sorted(path.name for path in tmp_path.iterdir()) == ["model.pt", "train.csv"]
+
+
+def _evaluation_pair(tmp_path):
+    header = "state,action,reward,next_state,done\n"
+    challenge = tmp_path / "challenge.csv"
+    solution = tmp_path / "solution.csv"
+    challenge.write_text(
+        header + "0,-1,0,1,0\n1,-1,0,2,0\n2,-1,0,3,0\n" + "3,-1,0,4,1\n4,-1,0,4,1\n"
+    )
+    solution.write_text(
+        header + "0,1,0,1,0\n1,1,0,2,0\n2,1,0,3,0\n" + "3,0,0,4,1\n4,2,0,4,1\n"
+    )
+    return challenge, solution
+
+
+def test_supported_policy_evaluation_reports_paired_tradeoff(tmp_path, capsys):
+    checkpoint, train = _inputs(tmp_path)
+    challenge, solution = _evaluation_pair(tmp_path)
+    result = evaluate_supported_policy(
+        checkpoint, train, challenge, solution, batch_size=2
+    )
+    assert result["unconstrained"]["metrics"]["accuracy"] == 0.6
+    assert result["supported"]["metrics"]["accuracy"] == 0.8
+    assert result["paired"] == {
+        "evaluation_rows": 5,
+        "observed_state_rows": 4,
+        "unobserved_state_rows": 1,
+        "changed_rows": 3,
+        "both_correct": 2,
+        "unconstrained_only_correct": 1,
+        "supported_only_correct": 2,
+        "both_wrong": 0,
+        "supported_minus_unconstrained_accuracy": pytest.approx(0.2),
+    }
+    assert result["inputs"]["train"]["sha256"] == sha256_file(train)
+    assert result["supported"]["overlap_slices"]["unseen_state"] == {
+        "rows": 1,
+        "accuracy": 1.0,
+    }
+    assert (
+        main(
+            [
+                "evaluate-supported-policy",
+                "--checkpoint",
+                str(checkpoint),
+                "--train",
+                str(train),
+                "--challenge",
+                str(challenge),
+                "--solution",
+                str(solution),
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out) == result
+
+
+def test_supported_policy_evaluation_rejects_changed_input(tmp_path, monkeypatch):
+    checkpoint, train = _inputs(tmp_path)
+    challenge, solution = _evaluation_pair(tmp_path)
+    real_hash = sha256_file
+    calls = 0
+
+    def changed_hash(path):
+        nonlocal calls
+        if str(path) == str(solution):
+            calls += 1
+            if calls == 2:
+                return "changed"
+        return real_hash(path)
+
+    monkeypatch.setattr("gridworld_rl.supported_evaluation.sha256_file", changed_hash)
+    with pytest.raises(ValueError, match="Solution changed"):
+        evaluate_supported_policy(checkpoint, train, challenge, solution)
 
 
 @pytest.mark.parametrize("batch_size", [0, -1, True, 1.5])

@@ -14,6 +14,20 @@ from .data import load_transition_csv
 from .reproducibility import resolve_device, sha256_file
 
 
+def select_supported_action(
+    q_values: list[float], logged_actions: list[int]
+) -> tuple[int, int]:
+    """Return the supported and unconstrained argmax, breaking ties by index."""
+
+    unrestricted = max(range(len(q_values)), key=q_values.__getitem__)
+    supported = (
+        max(logged_actions, key=q_values.__getitem__)
+        if logged_actions
+        else unrestricted
+    )
+    return supported, unrestricted
+
+
 def export_supported_policy(
     checkpoint: str | Path,
     train_csv: str | Path,
@@ -89,13 +103,8 @@ def export_supported_policy(
                     for index, q_values in enumerate(values.cpu().tolist()):
                         state = start + index
                         logged_actions = support.get(state, [])
-                        unrestricted = max(
-                            range(model.num_actions), key=q_values.__getitem__
-                        )
-                        action = (
-                            max(logged_actions, key=q_values.__getitem__)
-                            if logged_actions
-                            else unrestricted
+                        action, unrestricted = select_supported_action(
+                            q_values, logged_actions
                         )
                         changed += action != unrestricted
                         if state:
