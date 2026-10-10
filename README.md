@@ -551,6 +551,23 @@ logged-policy-support diagnostics. Input files are fingerprinted again before
 the audit returns. This detects stale predictions and metrics that are internally
 consistent but disagree with the saved model or original data.
 
+When two training logs differ, inspect their coverage and frequency shift with:
+
+```bash
+gridworld-rl compare-datasets \
+  --left path/to/older/train.csv \
+  --right path/to/newer/train.csv \
+  --num-states 100 \
+  --num-actions 4
+```
+
+Both CSVs receive the same strict validation as training data. The JSON reports
+state, state-action, and exact-transition overlap, rows at states and pairs new
+to the right log, each log's diagnostics, and Jensen-Shannon divergence in bits
+for action and state-action frequencies. A divergence of zero means matching
+empirical frequencies; one means disjoint support. Input hashes are checked
+again before output. These measures describe data shift, not policy quality.
+
 For a saved multi-seed comparison, use
 `gridworld-rl audit-benchmark --benchmark-dir artifacts/benchmarks/five-seed-study`.
 This verifies the outer manifest, audits each nested run, checks the declared

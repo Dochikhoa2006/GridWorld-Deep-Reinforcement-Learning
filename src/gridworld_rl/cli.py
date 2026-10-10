@@ -31,6 +31,7 @@ COMMANDS = frozenset(
         "audit-benchmark",
         "export-supported-policy",
         "evaluate-supported-policy",
+        "compare-datasets",
     }
 )
 ROOT_ONLY_OPTIONS = frozenset({"-h", "--help", "--version"})
@@ -232,6 +233,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="cross-check nested runs and a saved benchmark aggregate",
     )
     benchmark_audit.add_argument("--benchmark-dir", required=True)
+    datasets = subparsers.add_parser(
+        "compare-datasets",
+        help="measure coverage and distribution shift between CSV logs",
+    )
+    datasets.add_argument("--left", required=True)
+    datasets.add_argument("--right", required=True)
+    datasets.add_argument("--num-states", type=int, default=100)
+    datasets.add_argument("--num-actions", type=int, default=4)
     return parser
 
 
@@ -587,6 +596,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = audit_benchmark(args.benchmark_dir)
             print(json.dumps(result, sort_keys=True, allow_nan=False))
             return 0 if result["valid"] else 1
+        elif args.command == "compare-datasets":
+            from .dataset_comparison import compare_datasets
+
+            result = compare_datasets(
+                args.left,
+                args.right,
+                num_states=args.num_states,
+                num_actions=args.num_actions,
+            )
+            print(json.dumps(result, sort_keys=True, allow_nan=False))
         elif args.command == "verify":
             from .integrity import verify_artifacts
 
