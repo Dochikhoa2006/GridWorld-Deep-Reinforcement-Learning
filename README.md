@@ -495,6 +495,23 @@ threshold, prediction considers the most frequent logged action or actions;
 Q-value and lowest-index tie breaking still apply. Unseen states retain the
 unrestricted greedy fallback.
 
+To compare model choices on the same input rows, use majority-vote prediction:
+
+```bash
+gridworld-rl predict-ensemble \
+  --checkpoints artifacts/run-a/checkpoints/dqn.pt artifacts/run-b/checkpoints/dqn.pt \
+  --input states.csv \
+  --output ensemble-predictions.csv
+```
+
+At least two distinct checkpoints with matching state and action dimensions are
+required. The CSV retains input order and duplicates. It reports the winning
+action, vote count, agreement fraction, unanimity, member actions in checkpoint
+order, and per-action vote counts. Tied votes choose the lowest action index.
+Each checkpoint and the input CSV are fingerprinted before and after streaming
+inference, and an existing output is never replaced. Agreement indicates model
+consensus, not prediction correctness.
+
 `manifest.json` records SHA-256 hashes for the other run files. Reports are derived
 from saved metrics and can be regenerated without retraining:
 

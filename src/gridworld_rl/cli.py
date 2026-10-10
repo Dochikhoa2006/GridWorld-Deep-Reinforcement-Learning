@@ -22,6 +22,7 @@ COMMANDS = frozenset(
         "inspect-checkpoint",
         "export-policy",
         "predict",
+        "predict-ensemble",
         "compare-checkpoints",
         "audit-policy-support",
         "evaluate-checkpoint",
@@ -168,6 +169,17 @@ def build_parser() -> argparse.ArgumentParser:
     predict.add_argument(
         "--compact", action="store_true", help="omit per-action Q-value columns"
     )
+    ensemble = subparsers.add_parser(
+        "predict-ensemble",
+        help="majority-vote CSV predictions from multiple checkpoints",
+    )
+    ensemble.add_argument("--checkpoints", nargs="+", required=True)
+    ensemble.add_argument("--input", required=True, help="CSV with one state column")
+    ensemble.add_argument("--output", required=True, help="new predictions CSV file")
+    ensemble.add_argument(
+        "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
+    )
+    ensemble.add_argument("--batch-size", type=int, default=1024)
     compare = subparsers.add_parser(
         "compare-checkpoints",
         help="compare saved greedy policies across every discrete state",
@@ -544,6 +556,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 min_action_count=args.min_action_count,
             )
             print(f"Predictions exported: {output.resolve()}")
+        elif args.command == "predict-ensemble":
+            from .ensemble_inference import predict_ensemble_csv
+
+            output = predict_ensemble_csv(
+                args.checkpoints,
+                args.input,
+                args.output,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+            print(f"Ensemble predictions exported: {output.resolve()}")
         elif args.command == "compare-checkpoints":
             from .comparison import compare_checkpoints
 

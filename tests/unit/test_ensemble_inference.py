@@ -1,0 +1,136 @@
+from __future__ import annotations
+
+import csv
+
+import pytest
+import torch
+
+from gridworld_rl.cli import main
+from gridworld_rl.ensemble_inference import predict_ensemble_csv
+from gridworld_rl.models import QNetwork
+
+
+def _checkpoint(tmp_path, name, favored, *, num_states=5):
+    model = QNetwork(num_states, 3, [4])
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.zero_()
+        model.network[2].bias[favored] = 1
+    path = tmp_path / name
+    torch.save(
+        {
+            "format_version": 1,
+            "algorithm": "dqn",
+            "num_states": num_states,
+            "num_actions": 3,
+            "network": {"hidden_sizes": [4]},
+            "model_state_dict": model.state_dict(),
+        },
+        path,
+    )
+    return path
+
+
+def test_cli_ensemble_majority_and_tie_preserve_input_order(tmp_path, capsys):
+    first = _checkpoint(tmp_path, "first.pt", 2)
+    second = _checkpoint(tmp_path, "second.pt", 1)
+    third = _checkpoint(tmp_path, "third.pt", 2)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n4\n0\n4\n")
+    output = tmp_path / "result.csv"
+    assert (
+        main(
+            [
+                "predict-ensemble",
+                "--checkpoints",
+                str(first),
+                str(second),
+                str(third),
+                "--input",
+                str(source),
+                "--output",
+                str(output),
+                "--batch-size",
+                "2",
+            ]
+        )
+        == 0
+    )
+    assert "Ensemble predictions exported" in capsys.readouterr().out
+    with output.open(newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert [row["state"] for row in rows] == ["4", "0", "4"]
+    assert [row["action"] for row in rows] == ["2"] * 3
+    assert rows[0]["member_actions"] == "2;1;2"
+    assert [rows[0][f"votes_{i}"] for i in range(3)] == ["0", "1", "2"]
+    assert rows[0]["agreement_fraction"] == str(2 / 3)
+    assert rows[0]["unanimous"] == "False"
+    tied = tmp_path / "tied.csv"
+    predict_ensemble_csv([first, second], source, tied, batch_size=1)
+    with tied.open(newline="") as file:
+        assert [row["action"] for row in csv.DictReader(file)] == ["1"] * 3
+
+
+def test_ensemble_rejects_incompatible_or_duplicate_checkpoints(tmp_path):
+    first = _checkpoint(tmp_path, "first.pt", 0)
+    other = _checkpoint(tmp_path, "other.pt", 1, num_states=6)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n0\n")
+    output = tmp_path / "out.csv"
+    with pytest.raises(ValueError, match="distinct"):
+        predict_ensemble_csv([first, first], source, output)
+    with pytest.raises(ValueError, match="identical state and action dimensions"):
+        predict_ensemble_csv([first, other], source, output)
+    assert not output.exists()
+
+
+def test_ensemble_changed_input_aborts_publication(tmp_path, monkeypatch):
+    import gridworld_rl.ensemble_inference as ensemble
+
+    first = _checkpoint(tmp_path, "first.pt", 0)
+    second = _checkpoint(tmp_path, "second.pt", 1)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n0\n")
+    original = ensemble._write_ensemble_batch
+
+    def write_then_change(*args):
+        original(*args)
+        source.write_text("state\n1\n")
+
+    monkeypatch.setattr(ensemble, "_write_ensemble_batch", write_then_change)
+    output = tmp_path / "out.csv"
+    with pytest.raises(ValueError, match="State CSV changed"):
+        predict_ensemble_csv([first, second], source, output)
+    assert not output.exists()
+    assert list(tmp_path.glob(".out.csv.*.tmp")) == []
+
+
+def test_ensemble_changed_checkpoint_aborts_publication(tmp_path, monkeypatch):
+    import gridworld_rl.ensemble_inference as ensemble
+
+    first = _checkpoint(tmp_path, "first.pt", 0)
+    second = _checkpoint(tmp_path, "second.pt", 1)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n0\n")
+    original = ensemble._write_ensemble_batch
+
+    def write_then_change(*args):
+        original(*args)
+        second.write_bytes(second.read_bytes() + b"changed")
+
+    monkeypatch.setattr(ensemble, "_write_ensemble_batch", write_then_change)
+    output = tmp_path / "out.csv"
+    with pytest.raises(ValueError, match="Checkpoint changed"):
+        predict_ensemble_csv([first, second], source, output)
+    assert not output.exists()
+
+
+def test_ensemble_rejects_invalid_state_csv_without_output(tmp_path):
+    first = _checkpoint(tmp_path, "first.pt", 0)
+    second = _checkpoint(tmp_path, "second.pt", 1)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n5\n")
+    output = tmp_path / "out.csv"
+    with pytest.raises(ValueError, match="out-of-range"):
+        predict_ensemble_csv([first, second], source, output)
+    assert not output.exists()

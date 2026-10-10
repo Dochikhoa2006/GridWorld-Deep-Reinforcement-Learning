@@ -85,6 +85,44 @@ def _write_batch(
         )
 
 
+def iter_state_batches(source: Path, num_states: int, batch_size: int):
+    """Yield validated states in CSV order without loading the whole file."""
+
+    with source.open(encoding="utf-8", newline="") as input_file:
+        reader = csv.reader(input_file, strict=True)
+        if next(reader, None) != ["state"]:
+            raise ValueError("State CSV must contain exactly one column named 'state'.")
+        pending: list[int] = []
+        row_count = 0
+        for row in reader:
+            if len(row) != 1:
+                raise ValueError(f"State CSV row {row_count} must contain one state.")
+            try:
+                value = Decimal(row[0])
+            except InvalidOperation as exc:
+                raise ValueError(
+                    f"State CSV has a non-integer or non-finite state at row {row_count}."
+                ) from exc
+            if not value.is_finite() or value != value.to_integral_value():
+                raise ValueError(
+                    f"State CSV has a non-integer or non-finite state at row {row_count}."
+                )
+            if not 0 <= value < num_states:
+                raise ValueError(
+                    f"State CSV states must be in 0..{num_states - 1}; "
+                    f"out-of-range row: {row_count}."
+                )
+            pending.append(int(value))
+            row_count += 1
+            if len(pending) == batch_size:
+                yield row_count - len(pending), pending
+                pending = []
+        if row_count == 0:
+            raise ValueError("State CSV must contain at least one row.")
+        if pending:
+            yield row_count - len(pending), pending
+
+
 def predict_csv(
     checkpoint: str | Path,
     input_csv: str | Path,
@@ -138,18 +176,15 @@ def predict_csv(
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = None
     try:
-        with (
-            source.open(encoding="utf-8", newline="") as input_file,
-            tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                newline="",
-                dir=destination.parent,
-                prefix=f".{destination.name}.",
-                suffix=".tmp",
-                delete=False,
-            ) as temporary,
-        ):
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="",
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
             temporary_path = Path(temporary.name)
             writer = csv.writer(temporary)
             header = (
@@ -176,56 +211,14 @@ def predict_csv(
                     else [f"q_{action}" for action in range(model.num_actions)]
                 )
             )
-            reader = csv.reader(input_file, strict=True)
-            if next(reader, None) != ["state"]:
-                raise ValueError(
-                    "State CSV must contain exactly one column named 'state'."
-                )
-            pending: list[int] = []
-            row_count = 0
-            for row in reader:
-                if len(row) != 1:
-                    raise ValueError(
-                        f"State CSV row {row_count} must contain one state."
-                    )
-                try:
-                    value = Decimal(row[0])
-                except InvalidOperation as exc:
-                    raise ValueError(
-                        f"State CSV has a non-integer or non-finite state at row {row_count}."
-                    ) from exc
-                if not value.is_finite() or value != value.to_integral_value():
-                    raise ValueError(
-                        f"State CSV has a non-integer or non-finite state at row {row_count}."
-                    )
-                if not 0 <= value < model.num_states:
-                    raise ValueError(
-                        f"State CSV states must be in 0..{model.num_states - 1}; "
-                        f"out-of-range row: {row_count}."
-                    )
-                pending.append(int(value))
-                row_count += 1
-                if len(pending) == batch_size:
-                    _write_batch(
-                        writer,
-                        model,
-                        pending,
-                        start=row_count - len(pending),
-                        device=selected_device,
-                        compact=compact,
-                        support=support,
-                        action_counts=action_counts,
-                        min_action_count=min_action_count,
-                    )
-                    pending.clear()
-            if row_count == 0:
-                raise ValueError("State CSV must contain at least one row.")
-            if pending:
+            for start, pending in iter_state_batches(
+                source, model.num_states, batch_size
+            ):
                 _write_batch(
                     writer,
                     model,
                     pending,
-                    start=row_count - len(pending),
+                    start=start,
                     device=selected_device,
                     compact=compact,
                     support=support,
