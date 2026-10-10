@@ -108,6 +108,97 @@ def test_cli_compact_prediction(tmp_path):
     ]
 
 
+def _training_csv(tmp_path):
+    train = tmp_path / "train.csv"
+    train.write_text(
+        "state,action,reward,next_state,done\n"
+        "0,1,0,1,0\n0,2,0,1,0\n1,0,0,2,0\n"
+        "2,1,0,3,0\n2,2,0,3,0\n3,0,0,4,1\n3,1,0,4,1\n"
+    )
+    return train
+
+
+@pytest.mark.parametrize("compact", [False, True])
+def test_prediction_can_restrict_to_logged_actions(tmp_path, capsys, compact):
+    checkpoint = _checkpoint(tmp_path)
+    train = _training_csv(tmp_path)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n4\n0\n1\n2\n3\n4\n")
+    output = tmp_path / "predictions.csv"
+    args = [
+        "predict",
+        "--checkpoint",
+        str(checkpoint),
+        "--input",
+        str(source),
+        "--output",
+        str(output),
+        "--train",
+        str(train),
+        "--batch-size",
+        "2",
+    ]
+    if compact:
+        args.append("--compact")
+    assert main(args) == 0
+    capsys.readouterr()
+    with output.open(newline="") as file:
+        reader = csv.DictReader(file)
+        rows = list(reader)
+        assert reader.fieldnames == [
+            "state",
+            "action",
+            "supported_action_gap",
+            "unconstrained_action",
+            "unconstrained_action_gap",
+            "was_constrained",
+            "logged_actions",
+            *([] if compact else ["q_0", "q_1", "q_2"]),
+        ]
+    assert [int(row["state"]) for row in rows] == [4, 0, 1, 2, 3, 4]
+    assert [int(row["action"]) for row in rows] == [2, 1, 0, 1, 0, 2]
+    assert [int(row["unconstrained_action"]) for row in rows] == [2, 0, 1, 0, 0, 2]
+    assert [row["was_constrained"] for row in rows] == [
+        "False",
+        "True",
+        "True",
+        "True",
+        "False",
+        "False",
+    ]
+    assert [row["supported_action_gap"] for row in rows] == [
+        "3.0",
+        "1.0",
+        "",
+        "1.0",
+        "0.0",
+        "3.0",
+    ]
+    assert [row["logged_actions"] for row in rows] == ["", "1;2", "0", "1;2", "0;1", ""]
+    if not compact:
+        assert [float(rows[1][f"q_{i}"]) for i in range(3)] == [3, 1, 0]
+
+
+def test_changed_training_csv_aborts_supported_prediction(tmp_path, monkeypatch):
+    import gridworld_rl.inference as inference
+
+    checkpoint = _checkpoint(tmp_path)
+    train = _training_csv(tmp_path)
+    source = tmp_path / "states.csv"
+    source.write_text("state\n0\n")
+    original = inference._write_batch
+
+    def write_then_change(*args, **kwargs):
+        original(*args, **kwargs)
+        train.write_text(train.read_text() + "4,2,0,4,1\n")
+
+    monkeypatch.setattr(inference, "_write_batch", write_then_change)
+    output = tmp_path / "predictions.csv"
+    with pytest.raises(ValueError, match="Training CSV changed"):
+        predict_csv(checkpoint, source, output, train_csv=train, batch_size=1)
+    assert not output.exists()
+
+
 def test_cli_predict_and_no_clobber(tmp_path, capsys):
     checkpoint = _checkpoint(tmp_path)
     source = tmp_path / "states.csv"

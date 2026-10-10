@@ -156,6 +156,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     predict.add_argument("--batch-size", type=int, default=1024)
     predict.add_argument(
+        "--train",
+        help="restrict actions at observed states to those in this training CSV",
+    )
+    predict.add_argument(
         "--compact", action="store_true", help="omit per-action Q-value columns"
     )
     compare = subparsers.add_parser(
@@ -530,6 +534,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 device=args.device,
                 batch_size=args.batch_size,
                 compact=args.compact,
+                train_csv=args.train,
             )
             print(f"Predictions exported: {output.resolve()}")
         elif args.command == "compare-checkpoints":

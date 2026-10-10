@@ -481,6 +481,14 @@ prediction; a changed input prevents publication. Q-values are model estimates,
 not probabilities. Keep this CSV outside retained run and benchmark directories
 so their integrity manifests remain valid.
 
+Add `--train Gridworld-10_Dataset/train.csv` to `predict` to choose the highest-Q
+logged action at observed states. The supported output includes both action
+choices, a semicolon-separated logged-action list, and separate constrained and
+unconstrained Q gaps. A single logged action has a blank constrained gap because
+there is no second supported action; unseen states fall back to unrestricted
+greedy prediction. `--compact` still omits Q-value columns. The training CSV is
+validated and fingerprinted before and after prediction.
+
 `manifest.json` records SHA-256 hashes for the other run files. Reports are derived
 from saved metrics and can be regenerated without retraining:
 
