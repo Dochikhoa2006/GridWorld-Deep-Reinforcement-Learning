@@ -35,6 +35,22 @@ def test_evaluate_ensemble_reports_coverage_and_selective_accuracy(tmp_path, cap
     assert result["suggested_accuracy"] == pytest.approx(2 / 3)
     assert result["accepted_metrics"]["confusion_matrix"] == [[2, 0], [0, 0]]
     assert result["mean_agreement_accepted"] == pytest.approx(5 / 6)
+    assert result["agreement_basis"] == "member_share"
+    assert result["agreement_curve"] == [
+        {
+            "threshold": 1.0,
+            "accepted_rows": 1,
+            "coverage": 1 / 3,
+            "selective_accuracy": 1.0,
+        },
+        {
+            "threshold": 2 / 3,
+            "accepted_rows": 3,
+            "coverage": 1.0,
+            "selective_accuracy": 2 / 3,
+        },
+    ]
+    assert result["area_under_risk_coverage_curve"] == pytest.approx(2 / 9)
     assert result["inputs"]["predictions"]["sha256"] == sha256_file(predictions)
     assert (
         main(
@@ -83,6 +99,16 @@ def test_evaluate_weighted_ensemble_uses_weighted_winner(tmp_path):
     result = evaluate_ensemble_csv(predictions, challenge, solution)
     assert result["coverage"] == 1
     assert result["selective_accuracy"] == 0
+    assert result["agreement_basis"] == "weight_share"
+    assert result["agreement_curve"] == [
+        {
+            "threshold": 2 / 3,
+            "accepted_rows": 3,
+            "coverage": 1.0,
+            "selective_accuracy": 0.0,
+        }
+    ]
+    assert result["area_under_risk_coverage_curve"] == 1.0
 
 
 @pytest.mark.parametrize(

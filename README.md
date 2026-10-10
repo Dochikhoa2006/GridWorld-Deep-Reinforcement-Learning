@@ -542,6 +542,14 @@ gridworld-rl evaluate-ensemble \
 The JSON reports coverage, accuracy on rows with an action, accuracy of the
 suggested winner across all rows, and mean agreement for accepted and abstained
 rows. It includes classification metrics for accepted rows when any exist.
+`agreement_curve` lists every agreement threshold that changes coverage, with
+the resulting accepted-row count, coverage, and accuracy of suggested actions
+on those rows. For weighted ensembles it uses weighted vote share; otherwise it
+uses member vote share. The curve describes this labeled split and can help
+inspect the coverage tradeoff without rerunning inference.
+`area_under_risk_coverage_curve` sums error rate across the coverage gained at
+each attainable threshold; lower values indicate better selective performance
+on this split. Tied agreement scores enter together at one curve point.
 Prediction states must match challenge rows exactly, including duplicates and
 order. Vote counts, agreement, and abstention fields are checked before scoring;
 all three inputs are fingerprinted again before results are returned.

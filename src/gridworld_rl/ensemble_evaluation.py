@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import math
+from itertools import groupby
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,30 @@ def _fraction(value: str, row: int, field: str) -> float:
     if not math.isfinite(result) or not 0 <= result <= 1:
         raise ValueError(f"Prediction row {row} has invalid {field}.")
     return result
+
+
+def _agreement_curve(
+    agreements: list[float], predictions: np.ndarray, targets: np.ndarray
+) -> list[dict[str, float | int]]:
+    """List every attainable coverage point in descending agreement order."""
+
+    ordered = sorted(zip(agreements, predictions == targets, strict=True), reverse=True)
+    accepted = 0
+    correct = 0
+    curve = []
+    for threshold, rows in groupby(ordered, key=lambda item: item[0]):
+        for _, is_correct in rows:
+            accepted += 1
+            correct += int(is_correct)
+        curve.append(
+            {
+                "threshold": threshold,
+                "accepted_rows": accepted,
+                "coverage": accepted / len(targets),
+                "selective_accuracy": correct / accepted,
+            }
+        )
+    return curve
 
 
 def evaluate_ensemble_csv(
@@ -95,6 +120,7 @@ def evaluate_ensemble_csv(
     accepted: list[bool] = []
     predictions: list[int] = []
     agreements: list[float] = []
+    decision_agreements: list[float] = []
     with paths["predictions"].open(encoding="utf-8", newline="") as file:
         reader = csv.DictReader(file, strict=True)
         for index, row in enumerate(reader):
@@ -180,11 +206,20 @@ def evaluate_ensemble_csv(
             accepted.append(not abstained)
             predictions.append(winner)
             agreements.append(agreement)
+            decision_agreements.append(weight_share if weighted else agreement)
     if len(accepted) != len(states):
         raise ValueError("Ensemble predictions have fewer rows than the challenge.")
     accepted_mask = np.asarray(accepted, dtype=bool)
     predicted = np.asarray(predictions, dtype=np.int64)
     accepted_count = int(accepted_mask.sum())
+    agreement_curve = _agreement_curve(decision_agreements, predicted, targets)
+    previous_coverage = 0.0
+    area_under_risk_coverage_curve = 0.0
+    for point in agreement_curve:
+        area_under_risk_coverage_curve += (point["coverage"] - previous_coverage) * (
+            1 - point["selective_accuracy"]
+        )
+        previous_coverage = point["coverage"]
     result = {
         "schema_version": 1,
         "inputs": {
@@ -202,6 +237,9 @@ def evaluate_ensemble_csv(
         if accepted_count
         else None,
         "suggested_accuracy": float((predicted == targets).mean()),
+        "agreement_basis": "weight_share" if weighted else "member_share",
+        "agreement_curve": agreement_curve,
+        "area_under_risk_coverage_curve": area_under_risk_coverage_curve,
         "mean_agreement_accepted": float(np.mean(np.asarray(agreements)[accepted_mask]))
         if accepted_count
         else None,
