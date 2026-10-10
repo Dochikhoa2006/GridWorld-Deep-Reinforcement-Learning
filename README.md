@@ -530,6 +530,22 @@ the threshold uses weighted vote share; otherwise it uses member vote share.
 The threshold is inclusive: a row meeting it is accepted. Abstention reflects
 ensemble disagreement, not a calibrated probability of error.
 
+To score a saved ensemble CSV against an aligned evaluation split, run:
+
+```bash
+gridworld-rl evaluate-ensemble \
+  --predictions ensemble-predictions.csv \
+  --challenge Gridworld-10_Dataset/eval_challenge.csv \
+  --solution Gridworld-10_Dataset/eval_solution.csv
+```
+
+The JSON reports coverage, accuracy on rows with an action, accuracy of the
+suggested winner across all rows, and mean agreement for accepted and abstained
+rows. It includes classification metrics for accepted rows when any exist.
+Prediction states must match challenge rows exactly, including duplicates and
+order. Vote counts, agreement, and abstention fields are checked before scoring;
+all three inputs are fingerprinted again before results are returned.
+
 `manifest.json` records SHA-256 hashes for the other run files. Reports are derived
 from saved metrics and can be regenerated without retraining:
 

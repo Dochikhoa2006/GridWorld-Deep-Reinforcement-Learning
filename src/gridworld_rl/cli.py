@@ -23,6 +23,7 @@ COMMANDS = frozenset(
         "export-policy",
         "predict",
         "predict-ensemble",
+        "evaluate-ensemble",
         "compare-checkpoints",
         "audit-policy-support",
         "evaluate-checkpoint",
@@ -200,6 +201,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         help="minimum logged count for an eligible action (requires --train)",
     )
+    ensemble_eval = subparsers.add_parser(
+        "evaluate-ensemble",
+        help="score saved ensemble predictions on aligned labeled rows",
+    )
+    ensemble_eval.add_argument("--predictions", required=True)
+    ensemble_eval.add_argument("--challenge", required=True)
+    ensemble_eval.add_argument("--solution", required=True)
     compare = subparsers.add_parser(
         "compare-checkpoints",
         help="compare saved greedy policies across every discrete state",
@@ -591,6 +599,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 abstain_below=args.abstain_below,
             )
             print(f"Ensemble predictions exported: {output.resolve()}")
+        elif args.command == "evaluate-ensemble":
+            from .ensemble_evaluation import evaluate_ensemble_csv
+
+            result = evaluate_ensemble_csv(
+                args.predictions, args.challenge, args.solution
+            )
+            print(json.dumps(result, sort_keys=True, allow_nan=False))
         elif args.command == "compare-checkpoints":
             from .comparison import compare_checkpoints
 
