@@ -550,6 +550,13 @@ inspect the coverage tradeoff without rerunning inference.
 `area_under_risk_coverage_curve` sums error rate across the coverage gained at
 each attainable threshold; lower values indicate better selective performance
 on this split. Tied agreement scores enter together at one curve point.
+Add `--bootstrap-replicates 1000 --bootstrap-seed 42` to request percentile
+confidence intervals for coverage, suggested accuracy, and accuracy on accepted
+rows. Resampling keeps all rows for a state together, so repeated states are not
+treated as independent. `--confidence-level` defaults to `0.95`. If a resample
+has no accepted rows, it is omitted from the selective-accuracy interval; the
+JSON reports how many valid resamples remained. The interval is `null` when
+none remain.
 Prediction states must match challenge rows exactly, including duplicates and
 order. Vote counts, agreement, and abstention fields are checked before scoring;
 all three inputs are fingerprinted again before results are returned.

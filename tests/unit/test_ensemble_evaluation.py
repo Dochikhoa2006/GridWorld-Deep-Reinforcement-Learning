@@ -87,6 +87,96 @@ def test_evaluate_ensemble_handles_all_abstained(tmp_path):
     assert result["mean_agreement_accepted"] is None
 
 
+def test_ensemble_bootstrap_intervals_are_reproducible_and_cluster_states(
+    tmp_path, capsys
+):
+    predictions, challenge, solution = _files(tmp_path)
+    challenge.write_text(challenge.read_text().replace("2,-1,0,3,1", "0,-1,0,3,1"))
+    solution.write_text(solution.read_text().replace("2,0,0,3,1", "0,0,0,3,1"))
+    predictions.write_text(predictions.read_text().replace("2,0,2,", "0,0,2,"))
+    result = evaluate_ensemble_csv(
+        predictions,
+        challenge,
+        solution,
+        bootstrap_replicates=100,
+        bootstrap_seed=17,
+        confidence_level=0.9,
+    )
+    bootstrap = result["bootstrap"]
+    assert bootstrap["unique_states"] == 2
+    assert bootstrap["replicates"] == 100
+    assert bootstrap["selective_replicates"] <= 100
+    assert bootstrap["coverage_interval"]["estimate"] == pytest.approx(2 / 3)
+    assert bootstrap["suggested_accuracy_interval"]["estimate"] == pytest.approx(2 / 3)
+    assert bootstrap["selective_accuracy_interval"]["estimate"] == 1.0
+    assert (
+        bootstrap
+        == evaluate_ensemble_csv(
+            predictions,
+            challenge,
+            solution,
+            bootstrap_replicates=100,
+            bootstrap_seed=17,
+            confidence_level=0.9,
+        )["bootstrap"]
+    )
+    assert (
+        main(
+            [
+                "evaluate-ensemble",
+                "--predictions",
+                str(predictions),
+                "--challenge",
+                str(challenge),
+                "--solution",
+                str(solution),
+                "--bootstrap-replicates",
+                "100",
+                "--bootstrap-seed",
+                "17",
+                "--confidence-level",
+                "0.9",
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out) == result
+
+
+def test_ensemble_bootstrap_handles_zero_accepted_rows(tmp_path):
+    predictions, challenge, solution = _files(tmp_path)
+    text = (
+        predictions.read_text()
+        .replace(
+            "0,0,3,1.0,True,0;0;0,0,False,3,0",
+            "0,,2,0.6666666666666666,False,0;0;1,0,True,2,1",
+        )
+        .replace(
+            "2,0,2,0.6666666666666666,False,0;0;1,0,False",
+            "2,,2,0.6666666666666666,False,0;0;1,0,True",
+        )
+    )
+    predictions.write_text(text)
+    result = evaluate_ensemble_csv(
+        predictions, challenge, solution, bootstrap_replicates=20
+    )
+    assert result["bootstrap"]["selective_replicates"] == 0
+    assert result["bootstrap"]["selective_accuracy_interval"] is None
+
+
+@pytest.mark.parametrize(
+    "options,error",
+    [
+        ({"bootstrap_replicates": -1}, "bootstrap_replicates"),
+        ({"bootstrap_seed": -1}, "bootstrap_seed"),
+        ({"confidence_level": 1}, "confidence_level"),
+    ],
+)
+def test_ensemble_bootstrap_options_are_validated(tmp_path, options, error):
+    with pytest.raises(ValueError, match=error):
+        evaluate_ensemble_csv("missing.csv", "missing.csv", "missing.csv", **options)
+
+
 def test_evaluate_weighted_ensemble_uses_weighted_winner(tmp_path):
     predictions, challenge, solution = _files(tmp_path)
     predictions.write_text(

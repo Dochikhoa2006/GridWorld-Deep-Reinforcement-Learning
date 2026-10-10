@@ -13,6 +13,7 @@ import numpy as np
 from .data import load_evaluation_data
 from .evaluation import classification_metrics
 from .reproducibility import sha256_file
+from .uncertainty import validate_bootstrap_options
 
 
 def _action(value: str, num_actions: int, row: int, field: str) -> int:
@@ -58,13 +59,80 @@ def _agreement_curve(
     return curve
 
 
+def _bootstrap_intervals(
+    states: np.ndarray,
+    accepted: np.ndarray,
+    correct: np.ndarray,
+    *,
+    replicates: int,
+    seed: int,
+    confidence_level: float,
+) -> dict[str, Any]:
+    """Resample state clusters so duplicate states stay together."""
+
+    unique_states, inverse = np.unique(states, return_inverse=True)
+    cluster_count = len(unique_states)
+    sizes = np.bincount(inverse)
+    accepted_counts = np.bincount(inverse, weights=accepted.astype(np.int64))
+    accepted_correct = np.bincount(
+        inverse, weights=(accepted & correct).astype(np.int64)
+    )
+    correct_counts = np.bincount(inverse, weights=correct.astype(np.int64))
+    coverage_draws = np.empty(replicates)
+    suggested_draws = np.empty(replicates)
+    selective_draws = []
+    generator = np.random.default_rng(seed)
+    for index in range(replicates):
+        sampled = generator.integers(0, cluster_count, size=cluster_count)
+        total = sizes[sampled].sum()
+        accepted_total = accepted_counts[sampled].sum()
+        coverage_draws[index] = accepted_total / total
+        suggested_draws[index] = correct_counts[sampled].sum() / total
+        if accepted_total:
+            selective_draws.append(accepted_correct[sampled].sum() / accepted_total)
+    tail = (1 - confidence_level) / 2
+
+    def interval(estimate, draws):
+        return (
+            None
+            if not len(draws)
+            else {
+                "estimate": estimate,
+                "lower": float(np.quantile(draws, tail)),
+                "upper": float(np.quantile(draws, 1 - tail)),
+            }
+        )
+
+    accepted_total = int(accepted.sum())
+    return {
+        "method": "percentile state-cluster bootstrap",
+        "resampling_unit": "state",
+        "unique_states": cluster_count,
+        "replicates": replicates,
+        "selective_replicates": len(selective_draws),
+        "seed": seed,
+        "confidence_level": confidence_level,
+        "coverage_interval": interval(accepted_total / len(states), coverage_draws),
+        "suggested_accuracy_interval": interval(float(correct.mean()), suggested_draws),
+        "selective_accuracy_interval": interval(
+            float(correct[accepted].mean()) if accepted_total else None,
+            selective_draws,
+        ),
+    }
+
+
 def evaluate_ensemble_csv(
     predictions_csv: str | Path,
     challenge_csv: str | Path,
     solution_csv: str | Path,
+    *,
+    bootstrap_replicates: int = 0,
+    bootstrap_seed: int = 0,
+    confidence_level: float = 0.95,
 ) -> dict[str, Any]:
     """Report coverage and accuracy on accepted rows, checking row alignment."""
 
+    validate_bootstrap_options(bootstrap_replicates, bootstrap_seed, confidence_level)
     paths = {
         "predictions": Path(predictions_csv),
         "challenge": Path(challenge_csv),
@@ -254,6 +322,15 @@ def evaluate_ensemble_csv(
         if accepted_count
         else None,
     }
+    if bootstrap_replicates:
+        result["bootstrap"] = _bootstrap_intervals(
+            states,
+            accepted_mask,
+            predicted == targets,
+            replicates=bootstrap_replicates,
+            seed=bootstrap_seed,
+            confidence_level=float(confidence_level),
+        )
     for name, path in paths.items():
         if sha256_file(path) != fingerprints[name]:
             raise ValueError(
