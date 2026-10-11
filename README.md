@@ -590,6 +590,14 @@ and checks each saved row and column, including duplicates and abstentions. It
 returns the verified row count and SHA-256 hashes for all inputs. A mismatch
 reports its row and column; changed inputs abort verification.
 
+Add `--output artifacts/ensemble-evaluation.json` to `evaluate-ensemble` to
+save the JSON report as a new file. The export stores absolute input paths and
+hashes, and refuses to replace an existing file. To check a retained report,
+run `gridworld-rl audit-ensemble-report --report artifacts/ensemble-evaluation.json`.
+The audit reruns evaluation with the recorded bootstrap, coverage target, and
+training data settings, then compares the complete result. Changed inputs or
+metrics cause the audit to fail.
+
 To compare two saved ensembles on the same labeled split, run:
 
 ```bash

@@ -26,6 +26,7 @@ COMMANDS = frozenset(
         "evaluate-ensemble",
         "audit-ensemble-predictions",
         "compare-ensemble-predictions",
+        "audit-ensemble-report",
         "compare-checkpoints",
         "audit-policy-support",
         "evaluate-checkpoint",
@@ -226,6 +227,9 @@ def build_parser() -> argparse.ArgumentParser:
     ensemble_eval.add_argument("--challenge", required=True)
     ensemble_eval.add_argument("--solution", required=True)
     ensemble_eval.add_argument(
+        "--output", help="publish a new JSON report instead of printing it"
+    )
+    ensemble_eval.add_argument(
         "--train", help="training CSV for overlap and split diagnostics"
     )
     ensemble_eval.add_argument("--bootstrap-replicates", type=int, default=0)
@@ -247,6 +251,10 @@ def build_parser() -> argparse.ArgumentParser:
     ensemble_compare.add_argument("--bootstrap-replicates", type=int, default=0)
     ensemble_compare.add_argument("--bootstrap-seed", type=int, default=0)
     ensemble_compare.add_argument("--confidence-level", type=float, default=0.95)
+    ensemble_report_audit = subparsers.add_parser(
+        "audit-ensemble-report", help="recompute and verify a saved ensemble evaluation"
+    )
+    ensemble_report_audit.add_argument("--report", required=True)
     compare = subparsers.add_parser(
         "compare-checkpoints",
         help="compare saved greedy policies across every discrete state",
@@ -639,19 +647,34 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             print(f"Ensemble predictions exported: {output.resolve()}")
         elif args.command == "evaluate-ensemble":
-            from .ensemble_evaluation import evaluate_ensemble_csv
+            options = {
+                "bootstrap_replicates": args.bootstrap_replicates,
+                "bootstrap_seed": args.bootstrap_seed,
+                "confidence_level": args.confidence_level,
+                "target_coverage": args.target_coverage,
+                "train_csv": args.train,
+            }
+            if args.output:
+                from .ensemble_report import save_ensemble_evaluation
 
-            result = evaluate_ensemble_csv(
-                args.predictions,
-                args.challenge,
-                args.solution,
-                bootstrap_replicates=args.bootstrap_replicates,
-                bootstrap_seed=args.bootstrap_seed,
-                confidence_level=args.confidence_level,
-                target_coverage=args.target_coverage,
-                train_csv=args.train,
-            )
-            print(json.dumps(result, sort_keys=True, allow_nan=False))
+                output = save_ensemble_evaluation(
+                    args.output,
+                    args.predictions,
+                    args.challenge,
+                    args.solution,
+                    **options,
+                )
+                print(f"Ensemble evaluation saved: {output.resolve()}")
+            else:
+                from .ensemble_evaluation import evaluate_ensemble_csv
+
+                result = evaluate_ensemble_csv(
+                    args.predictions,
+                    args.challenge,
+                    args.solution,
+                    **options,
+                )
+                print(json.dumps(result, sort_keys=True, allow_nan=False))
         elif args.command == "audit-ensemble-predictions":
             from .ensemble_audit import audit_ensemble_predictions
 
@@ -679,6 +702,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 bootstrap_seed=args.bootstrap_seed,
                 confidence_level=args.confidence_level,
             )
+            print(json.dumps(result, sort_keys=True, allow_nan=False))
+        elif args.command == "audit-ensemble-report":
+            from .ensemble_report import audit_ensemble_evaluation_report
+
+            result = audit_ensemble_evaluation_report(args.report)
             print(json.dumps(result, sort_keys=True, allow_nan=False))
         elif args.command == "compare-checkpoints":
             from .comparison import compare_checkpoints
