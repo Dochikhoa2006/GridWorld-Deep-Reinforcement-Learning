@@ -574,6 +574,22 @@ Prediction states must match challenge rows exactly, including duplicates and
 order. Vote counts, agreement, and abstention fields are checked before scoring;
 all three inputs are fingerprinted again before results are returned.
 
+To verify a saved ensemble CSV against its original models and inference
+settings, replay it with:
+
+```bash
+gridworld-rl audit-ensemble-predictions \
+  --checkpoints artifacts/run-a/checkpoints/dqn.pt artifacts/run-b/checkpoints/dqn.pt \
+  --input states.csv \
+  --predictions ensemble-predictions.csv
+```
+
+Pass the same `--train`, `--min-action-count`, `--weights`, and
+`--abstain-below` values used for prediction. The audit streams a fresh replay
+and checks each saved row and column, including duplicates and abstentions. It
+returns the verified row count and SHA-256 hashes for all inputs. A mismatch
+reports its row and column; changed inputs abort verification.
+
 `manifest.json` records SHA-256 hashes for the other run files. Reports are derived
 from saved metrics and can be regenerated without retraining:
 

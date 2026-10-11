@@ -24,6 +24,7 @@ COMMANDS = frozenset(
         "predict",
         "predict-ensemble",
         "evaluate-ensemble",
+        "audit-ensemble-predictions",
         "compare-checkpoints",
         "audit-policy-support",
         "evaluate-checkpoint",
@@ -201,6 +202,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         help="minimum logged count for an eligible action (requires --train)",
     )
+    ensemble_audit = subparsers.add_parser(
+        "audit-ensemble-predictions",
+        help="replay and verify a saved ensemble prediction CSV",
+    )
+    ensemble_audit.add_argument("--checkpoints", nargs="+", required=True)
+    ensemble_audit.add_argument("--input", required=True)
+    ensemble_audit.add_argument("--predictions", required=True)
+    ensemble_audit.add_argument("--train")
+    ensemble_audit.add_argument("--min-action-count", type=int, default=1)
+    ensemble_audit.add_argument("--weights", nargs="+", type=float)
+    ensemble_audit.add_argument("--abstain-below", type=float)
+    ensemble_audit.add_argument(
+        "--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"]
+    )
+    ensemble_audit.add_argument("--batch-size", type=int, default=1024)
     ensemble_eval = subparsers.add_parser(
         "evaluate-ensemble",
         help="score saved ensemble predictions on aligned labeled rows",
@@ -622,6 +638,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 confidence_level=args.confidence_level,
                 target_coverage=args.target_coverage,
                 train_csv=args.train,
+            )
+            print(json.dumps(result, sort_keys=True, allow_nan=False))
+        elif args.command == "audit-ensemble-predictions":
+            from .ensemble_audit import audit_ensemble_predictions
+
+            result = audit_ensemble_predictions(
+                args.checkpoints,
+                args.input,
+                args.predictions,
+                device=args.device,
+                batch_size=args.batch_size,
+                train_csv=args.train,
+                min_action_count=args.min_action_count,
+                weights=args.weights,
+                abstain_below=args.abstain_below,
             )
             print(json.dumps(result, sort_keys=True, allow_nan=False))
         elif args.command == "compare-checkpoints":
