@@ -557,6 +557,13 @@ treated as independent. `--confidence-level` defaults to `0.95`. If a resample
 has no accepted rows, it is omitted from the selective-accuracy interval; the
 JSON reports how many valid resamples remained. The interval is `null` when
 none remain.
+Use `--target-coverage 0.8` to get a `recommended_threshold` for
+`predict-ensemble --abstain-below`. It selects the highest agreement threshold
+that covers at least 80% of rows on this evaluation split. Rows with the same
+agreement enter together, so achieved coverage can exceed the target. When
+bootstrap is enabled, the recommendation also includes intervals at that
+threshold. Choose the threshold on held-out calibration rows before applying
+it to new data.
 Prediction states must match challenge rows exactly, including duplicates and
 order. Vote counts, agreement, and abstention fields are checked before scoring;
 all three inputs are fingerprinted again before results are returned.

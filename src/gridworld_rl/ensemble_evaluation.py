@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import math
 from itertools import groupby
+from numbers import Real
 from pathlib import Path
 from typing import Any
 
@@ -129,10 +130,18 @@ def evaluate_ensemble_csv(
     bootstrap_replicates: int = 0,
     bootstrap_seed: int = 0,
     confidence_level: float = 0.95,
+    target_coverage: float | None = None,
 ) -> dict[str, Any]:
     """Report coverage and accuracy on accepted rows, checking row alignment."""
 
     validate_bootstrap_options(bootstrap_replicates, bootstrap_seed, confidence_level)
+    if target_coverage is not None and (
+        isinstance(target_coverage, bool)
+        or not isinstance(target_coverage, Real)
+        or not math.isfinite(target_coverage)
+        or not 0 < target_coverage <= 1
+    ):
+        raise ValueError("target_coverage must be a finite number in (0, 1].")
     paths = {
         "predictions": Path(predictions_csv),
         "challenge": Path(challenge_csv),
@@ -322,6 +331,18 @@ def evaluate_ensemble_csv(
         if accepted_count
         else None,
     }
+    if target_coverage is not None:
+        chosen = next(
+            point for point in agreement_curve if point["coverage"] >= target_coverage
+        )
+        result["recommended_threshold"] = {
+            "target_coverage": float(target_coverage),
+            "abstain_below": chosen["threshold"],
+            "accepted_rows": chosen["accepted_rows"],
+            "achieved_coverage": chosen["coverage"],
+            "selective_accuracy": chosen["selective_accuracy"],
+            "agreement_basis": result["agreement_basis"],
+        }
     if bootstrap_replicates:
         result["bootstrap"] = _bootstrap_intervals(
             states,
@@ -331,6 +352,16 @@ def evaluate_ensemble_csv(
             seed=bootstrap_seed,
             confidence_level=float(confidence_level),
         )
+        if target_coverage is not None:
+            recommended_mask = np.asarray(decision_agreements) >= chosen["threshold"]
+            result["recommended_threshold"]["bootstrap"] = _bootstrap_intervals(
+                states,
+                recommended_mask,
+                predicted == targets,
+                replicates=bootstrap_replicates,
+                seed=bootstrap_seed,
+                confidence_level=float(confidence_level),
+            )
     for name, path in paths.items():
         if sha256_file(path) != fingerprints[name]:
             raise ValueError(

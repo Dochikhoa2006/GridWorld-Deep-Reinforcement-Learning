@@ -69,6 +69,62 @@ def test_evaluate_ensemble_reports_coverage_and_selective_accuracy(tmp_path, cap
     assert json.loads(capsys.readouterr().out) == result
 
 
+@pytest.mark.parametrize(
+    "target,threshold,accepted",
+    [(0.2, 1.0, 1), (0.5, 2 / 3, 3), (1.0, 2 / 3, 3)],
+)
+def test_target_coverage_recommends_strictest_attainable_threshold(
+    tmp_path, target, threshold, accepted
+):
+    predictions, challenge, solution = _files(tmp_path)
+    result = evaluate_ensemble_csv(
+        predictions, challenge, solution, target_coverage=target
+    )
+    recommendation = result["recommended_threshold"]
+    assert recommendation["target_coverage"] == target
+    assert recommendation["abstain_below"] == threshold
+    assert recommendation["accepted_rows"] == accepted
+    assert recommendation["achieved_coverage"] == accepted / 3
+    assert recommendation["agreement_basis"] == "member_share"
+
+
+def test_target_coverage_cli_includes_recommendation_bootstrap(tmp_path, capsys):
+    predictions, challenge, solution = _files(tmp_path)
+    assert (
+        main(
+            [
+                "evaluate-ensemble",
+                "--predictions",
+                str(predictions),
+                "--challenge",
+                str(challenge),
+                "--solution",
+                str(solution),
+                "--target-coverage",
+                "0.2",
+                "--bootstrap-replicates",
+                "50",
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+    recommendation = result["recommended_threshold"]
+    assert recommendation["abstain_below"] == 1.0
+    assert recommendation["bootstrap"]["coverage_interval"][
+        "estimate"
+    ] == pytest.approx(1 / 3)
+    assert result["bootstrap"]["coverage_interval"]["estimate"] == pytest.approx(2 / 3)
+
+
+@pytest.mark.parametrize("target", [0, -1, 1.1, float("nan"), float("inf"), True])
+def test_invalid_target_coverage_is_rejected(tmp_path, target):
+    with pytest.raises(ValueError, match="target_coverage"):
+        evaluate_ensemble_csv(
+            "missing.csv", "missing.csv", "missing.csv", target_coverage=target
+        )
+
+
 def test_evaluate_ensemble_handles_all_abstained(tmp_path):
     predictions, challenge, solution = _files(tmp_path)
     body = predictions.read_text().replace(
@@ -186,10 +242,14 @@ def test_evaluate_weighted_ensemble_uses_weighted_winner(tmp_path):
         "1,1,1,0.3333333333333333,False,0;1;0,4.0,0.6666666666666666,1,False,2,1,2.0,4.0\n"
         "2,1,1,0.3333333333333333,False,0;1;0,4.0,0.6666666666666666,1,False,2,1,2.0,4.0\n"
     )
-    result = evaluate_ensemble_csv(predictions, challenge, solution)
+    result = evaluate_ensemble_csv(
+        predictions, challenge, solution, target_coverage=0.5
+    )
     assert result["coverage"] == 1
     assert result["selective_accuracy"] == 0
     assert result["agreement_basis"] == "weight_share"
+    assert result["recommended_threshold"]["abstain_below"] == 2 / 3
+    assert result["recommended_threshold"]["agreement_basis"] == "weight_share"
     assert result["agreement_curve"] == [
         {
             "threshold": 2 / 3,
