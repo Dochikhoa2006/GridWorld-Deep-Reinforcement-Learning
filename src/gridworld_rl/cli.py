@@ -25,6 +25,7 @@ COMMANDS = frozenset(
         "predict-ensemble",
         "evaluate-ensemble",
         "audit-ensemble-predictions",
+        "compare-ensemble-predictions",
         "compare-checkpoints",
         "audit-policy-support",
         "evaluate-checkpoint",
@@ -235,6 +236,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         help="recommend the strictest agreement threshold meeting this row coverage",
     )
+    ensemble_compare = subparsers.add_parser(
+        "compare-ensemble-predictions",
+        help="compare two saved ensemble CSVs on the same labeled rows",
+    )
+    ensemble_compare.add_argument("--left", required=True)
+    ensemble_compare.add_argument("--right", required=True)
+    ensemble_compare.add_argument("--challenge", required=True)
+    ensemble_compare.add_argument("--solution", required=True)
+    ensemble_compare.add_argument("--bootstrap-replicates", type=int, default=0)
+    ensemble_compare.add_argument("--bootstrap-seed", type=int, default=0)
+    ensemble_compare.add_argument("--confidence-level", type=float, default=0.95)
     compare = subparsers.add_parser(
         "compare-checkpoints",
         help="compare saved greedy policies across every discrete state",
@@ -653,6 +665,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                 min_action_count=args.min_action_count,
                 weights=args.weights,
                 abstain_below=args.abstain_below,
+            )
+            print(json.dumps(result, sort_keys=True, allow_nan=False))
+        elif args.command == "compare-ensemble-predictions":
+            from .ensemble_comparison import compare_ensemble_predictions
+
+            result = compare_ensemble_predictions(
+                args.left,
+                args.right,
+                args.challenge,
+                args.solution,
+                bootstrap_replicates=args.bootstrap_replicates,
+                bootstrap_seed=args.bootstrap_seed,
+                confidence_level=args.confidence_level,
             )
             print(json.dumps(result, sort_keys=True, allow_nan=False))
         elif args.command == "compare-checkpoints":

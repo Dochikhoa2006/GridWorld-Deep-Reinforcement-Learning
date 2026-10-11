@@ -590,6 +590,22 @@ and checks each saved row and column, including duplicates and abstentions. It
 returns the verified row count and SHA-256 hashes for all inputs. A mismatch
 reports its row and column; changed inputs abort verification.
 
+To compare two saved ensembles on the same labeled split, run:
+
+```bash
+gridworld-rl compare-ensemble-predictions \
+  --left ensemble-a.csv --right ensemble-b.csv \
+  --challenge Gridworld-10_Dataset/eval_challenge.csv \
+  --solution Gridworld-10_Dataset/eval_solution.csv
+```
+
+The JSON shows each ensemble's coverage and accepted-row accuracy, counts for
+both accepted, either alone, and neither accepted, plus paired accuracy on rows
+accepted by both. The shared accuracy difference is left minus right; a null
+value means there are no shared accepted rows. Suggested-action disagreements
+include abstentions. Optional `--bootstrap-replicates` and `--bootstrap-seed`
+produce state-cluster intervals for coverage and shared accuracy differences.
+
 `manifest.json` records SHA-256 hashes for the other run files. Reports are derived
 from saved metrics and can be regenerated without retraining:
 
