@@ -8,8 +8,13 @@ from typing import Any
 
 import numpy as np
 
-from .data import load_evaluation_data
+from .data import (
+    evaluation_split_diagnostics,
+    load_evaluation_data,
+    load_transition_csv,
+)
 from .ensemble_evaluation import evaluate_ensemble_csv
+from .evaluation import overlap_slice_masks
 from .reproducibility import sha256_file
 from .uncertainty import validate_bootstrap_options
 
@@ -105,6 +110,49 @@ def _bootstrap_differences(
     }
 
 
+def _slice_comparison(
+    mask,
+    left_accepted,
+    right_accepted,
+    left_correct,
+    right_correct,
+) -> dict[str, Any]:
+    rows = int(mask.sum())
+    left = mask & left_accepted
+    right = mask & right_accepted
+    shared = left & right
+    shared_rows = int(shared.sum())
+    left_rows = int(left.sum())
+    right_rows = int(right.sum())
+    return {
+        "rows": rows,
+        "left_accepted": left_rows,
+        "right_accepted": right_rows,
+        "both_accepted": shared_rows,
+        "left_only_accepted": int((left & ~right).sum()),
+        "right_only_accepted": int((~left & right).sum()),
+        "neither_accepted": int((mask & ~left & ~right).sum()),
+        "left_coverage": left_rows / rows if rows else None,
+        "right_coverage": right_rows / rows if rows else None,
+        "coverage_difference": (left_rows - right_rows) / rows if rows else None,
+        "shared_left_accuracy": float(left_correct[shared].mean())
+        if shared_rows
+        else None,
+        "shared_right_accuracy": float(right_correct[shared].mean())
+        if shared_rows
+        else None,
+        "shared_accuracy_difference": (
+            float(
+                (
+                    left_correct[shared].astype(int) - right_correct[shared].astype(int)
+                ).mean()
+            )
+            if shared_rows
+            else None
+        ),
+    }
+
+
 def compare_ensemble_predictions(
     left_csv: str | Path,
     right_csv: str | Path,
@@ -114,6 +162,7 @@ def compare_ensemble_predictions(
     bootstrap_replicates: int = 0,
     bootstrap_seed: int = 0,
     confidence_level: float = 0.95,
+    train_csv: str | Path | None = None,
 ) -> dict[str, Any]:
     """Compare accepted rows and paired correctness on the same labeled split."""
 
@@ -124,6 +173,8 @@ def compare_ensemble_predictions(
         "challenge": Path(challenge_csv),
         "solution": Path(solution_csv),
     }
+    if train_csv is not None:
+        paths["train"] = Path(train_csv)
     if paths["left"].resolve() == paths["right"].resolve():
         raise ValueError("Left and right ensemble prediction CSVs must be distinct.")
     fingerprints = {name: sha256_file(path) for name, path in paths.items()}
@@ -190,6 +241,19 @@ def compare_ensemble_predictions(
             (left_suggested != right_suggested).sum()
         ),
     }
+    if "train" in paths:
+        train = load_transition_csv(
+            paths["train"], num_actions=left_result["num_actions"]
+        )
+        result["evaluation_split_diagnostics"] = evaluation_split_diagnostics(
+            train, solution, num_actions=left_result["num_actions"]
+        )
+        result["overlap_sliced_comparison"] = {
+            name: _slice_comparison(
+                mask, left_accepted, right_accepted, left_correct, right_correct
+            )
+            for name, mask in overlap_slice_masks(train, solution).items()
+        }
     if bootstrap_replicates:
         result["bootstrap"] = _bootstrap_differences(
             states,

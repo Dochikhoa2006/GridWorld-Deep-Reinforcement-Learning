@@ -613,6 +613,11 @@ accepted by both. The shared accuracy difference is left minus right; a null
 value means there are no shared accepted rows. Suggested-action disagreements
 include abstentions. Optional `--bootstrap-replicates` and `--bootstrap-seed`
 produce state-cluster intervals for coverage and shared accuracy differences.
+Add `--train Gridworld-10_Dataset/train.csv` to split the paired comparison into
+exact training transitions, new transitions at seen states, and unseen states.
+Each slice reports both ensembles' accepted counts and coverage, where only one
+acts, and their paired accuracy difference on shared accepted rows. Empty slices
+use `null` for undefined rates. The validated training CSV is fingerprinted.
 
 `manifest.json` records SHA-256 hashes for the other run files. Reports are derived
 from saved metrics and can be regenerated without retraining:

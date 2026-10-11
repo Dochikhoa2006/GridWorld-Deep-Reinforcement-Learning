@@ -248,6 +248,9 @@ def build_parser() -> argparse.ArgumentParser:
     ensemble_compare.add_argument("--right", required=True)
     ensemble_compare.add_argument("--challenge", required=True)
     ensemble_compare.add_argument("--solution", required=True)
+    ensemble_compare.add_argument(
+        "--train", help="training CSV for overlap-sliced paired diagnostics"
+    )
     ensemble_compare.add_argument("--bootstrap-replicates", type=int, default=0)
     ensemble_compare.add_argument("--bootstrap-seed", type=int, default=0)
     ensemble_compare.add_argument("--confidence-level", type=float, default=0.95)
@@ -701,6 +704,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 bootstrap_replicates=args.bootstrap_replicates,
                 bootstrap_seed=args.bootstrap_seed,
                 confidence_level=args.confidence_level,
+                train_csv=args.train,
             )
             print(json.dumps(result, sort_keys=True, allow_nan=False))
         elif args.command == "audit-ensemble-report":

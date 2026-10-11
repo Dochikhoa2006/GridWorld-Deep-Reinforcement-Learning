@@ -71,6 +71,63 @@ def test_compare_ensembles_reports_shared_accuracy_and_coverage(tmp_path, capsys
     assert json.loads(capsys.readouterr().out) == result
 
 
+def test_compare_ensembles_slices_differences_by_training_overlap(tmp_path, capsys):
+    left, right, challenge, solution = _files(tmp_path)
+    train = tmp_path / "train.csv"
+    train.write_text("state,action,reward,next_state,done\n0,0,0,1,0\n1,0,0,0,0\n")
+    result = compare_ensemble_predictions(
+        left, right, challenge, solution, train_csv=train
+    )
+    slices = result["overlap_sliced_comparison"]
+    assert slices["exact_training_transition"]["rows"] == 1
+    assert slices["exact_training_transition"]["both_accepted"] == 1
+    assert slices["exact_training_transition"]["shared_accuracy_difference"] == 1.0
+    assert slices["seen_state_new_transition"]["left_only_accepted"] == 1
+    assert slices["seen_state_new_transition"]["right_coverage"] == 0
+    assert slices["unseen_state"]["rows"] == 2
+    assert slices["unseen_state"]["coverage_difference"] == -0.5
+    assert slices["unseen_state"]["shared_accuracy_difference"] == 0
+    assert sum(item["rows"] for item in slices.values()) == result["num_rows"]
+    assert result["inputs"]["train"]["sha256"] == sha256_file(train)
+    assert (
+        main(
+            [
+                "compare-ensemble-predictions",
+                "--left",
+                str(left),
+                "--right",
+                str(right),
+                "--challenge",
+                str(challenge),
+                "--solution",
+                str(solution),
+                "--train",
+                str(train),
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out) == result
+
+
+def test_compare_ensembles_empty_overlap_slice_uses_null_rates(tmp_path):
+    left, right, challenge, solution = _files(tmp_path)
+    train = tmp_path / "train.csv"
+    train.write_text(
+        "state,action,reward,next_state,done\n"
+        "0,0,0,1,0\n1,1,0,2,0\n2,0,0,3,0\n3,1,0,4,1\n"
+    )
+    result = compare_ensemble_predictions(
+        left, right, challenge, solution, train_csv=train
+    )
+    empty = result["overlap_sliced_comparison"]["unseen_state"]
+    assert empty["rows"] == 0
+    assert empty["left_coverage"] is None
+    assert empty["right_coverage"] is None
+    assert empty["coverage_difference"] is None
+    assert empty["shared_accuracy_difference"] is None
+
+
 def test_compare_ensembles_bootstrap_is_deterministic(tmp_path):
     left, right, challenge, solution = _files(tmp_path)
     result = compare_ensemble_predictions(
@@ -145,3 +202,25 @@ def test_compare_ensembles_rejects_same_file(tmp_path):
     left, _, challenge, solution = _files(tmp_path)
     with pytest.raises(ValueError, match="distinct"):
         compare_ensemble_predictions(left, left, challenge, solution)
+
+
+def test_compare_ensembles_detects_changed_training_csv(tmp_path, monkeypatch):
+    import gridworld_rl.ensemble_comparison as comparison
+
+    left, right, challenge, solution = _files(tmp_path)
+    train = tmp_path / "train.csv"
+    train.write_text("state,action,reward,next_state,done\n0,0,0,1,0\n")
+    original = comparison.sha256_file
+    calls = 0
+
+    def changed(path):
+        nonlocal calls
+        if path == train:
+            calls += 1
+            if calls == 2:
+                return "changed"
+        return original(path)
+
+    monkeypatch.setattr(comparison, "sha256_file", changed)
+    with pytest.raises(ValueError, match="Train changed"):
+        compare_ensemble_predictions(left, right, challenge, solution, train_csv=train)
