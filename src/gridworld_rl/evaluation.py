@@ -230,6 +230,25 @@ def overlap_sliced_agreement(
 
     if len(solution) != len(targets) or len(targets) != len(predictions):
         raise ValueError("Evaluation rows, targets, and predictions must align.")
+    masks = overlap_slice_masks(train, solution)
+    return {
+        name: {
+            "rows": int(mask.sum()),
+            "accuracy": (
+                float(np.mean(targets[mask] == predictions[mask]))
+                if mask.any()
+                else None
+            ),
+        }
+        for name, mask in masks.items()
+    }
+
+
+def overlap_slice_masks(
+    train: pd.DataFrame, solution: pd.DataFrame
+) -> dict[str, np.ndarray]:
+    """Partition solution rows by exact transition and observed-state overlap."""
+
     columns = list(REQUIRED_COLUMNS)
     train_rows = set(train.loc[:, columns].itertuples(index=False, name=None))
     train_states = set(train["state"])
@@ -242,15 +261,4 @@ def overlap_sliced_agreement(
         count=len(solution),
     )
     seen = solution["state"].isin(train_states).to_numpy(dtype=bool)
-    masks = (exact, seen & ~exact, ~seen)
-    return {
-        name: {
-            "rows": int(mask.sum()),
-            "accuracy": (
-                float(np.mean(targets[mask] == predictions[mask]))
-                if mask.any()
-                else None
-            ),
-        }
-        for name, mask in zip(EVALUATION_SLICES, masks, strict=True)
-    }
+    return dict(zip(EVALUATION_SLICES, (exact, seen & ~exact, ~seen), strict=True))

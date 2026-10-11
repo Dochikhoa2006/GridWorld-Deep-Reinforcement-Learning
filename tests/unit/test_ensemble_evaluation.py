@@ -117,6 +117,76 @@ def test_target_coverage_cli_includes_recommendation_bootstrap(tmp_path, capsys)
     assert result["bootstrap"]["coverage_interval"]["estimate"] == pytest.approx(2 / 3)
 
 
+def test_ensemble_training_overlap_slices_coverage_and_accuracy(tmp_path, capsys):
+    predictions, challenge, solution = _files(tmp_path)
+    train = tmp_path / "train.csv"
+    train.write_text("state,action,reward,next_state,done\n0,0,0,1,0\n1,1,0,0,0\n")
+    result = evaluate_ensemble_csv(predictions, challenge, solution, train_csv=train)
+    slices = result["overlap_sliced_ensemble"]
+    assert slices["exact_training_transition"] == {
+        "rows": 1,
+        "accepted_rows": 1,
+        "abstained_rows": 0,
+        "coverage": 1.0,
+        "selective_accuracy": 1.0,
+        "suggested_accuracy": 1.0,
+    }
+    assert slices["seen_state_new_transition"] == {
+        "rows": 1,
+        "accepted_rows": 0,
+        "abstained_rows": 1,
+        "coverage": 0.0,
+        "selective_accuracy": None,
+        "suggested_accuracy": 0.0,
+    }
+    assert slices["unseen_state"] == {
+        "rows": 1,
+        "accepted_rows": 1,
+        "abstained_rows": 0,
+        "coverage": 1.0,
+        "selective_accuracy": 1.0,
+        "suggested_accuracy": 1.0,
+    }
+    assert sum(item["rows"] for item in slices.values()) == result["num_rows"]
+    assert result["inputs"]["train"]["sha256"] == sha256_file(train)
+    assert (
+        main(
+            [
+                "evaluate-ensemble",
+                "--predictions",
+                str(predictions),
+                "--challenge",
+                str(challenge),
+                "--solution",
+                str(solution),
+                "--train",
+                str(train),
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out) == result
+
+
+def test_ensemble_training_overlap_handles_empty_slice(tmp_path):
+    predictions, challenge, solution = _files(tmp_path)
+    train = tmp_path / "train.csv"
+    train.write_text(
+        "state,action,reward,next_state,done\n0,0,0,1,0\n1,0,0,2,0\n2,0,0,3,1\n"
+    )
+    slices = evaluate_ensemble_csv(predictions, challenge, solution, train_csv=train)[
+        "overlap_sliced_ensemble"
+    ]
+    assert slices["unseen_state"] == {
+        "rows": 0,
+        "accepted_rows": 0,
+        "abstained_rows": 0,
+        "coverage": None,
+        "selective_accuracy": None,
+        "suggested_accuracy": None,
+    }
+
+
 @pytest.mark.parametrize("target", [0, -1, 1.1, float("nan"), float("inf"), True])
 def test_invalid_target_coverage_is_rejected(tmp_path, target):
     with pytest.raises(ValueError, match="target_coverage"):
@@ -302,3 +372,25 @@ def test_evaluate_ensemble_detects_changed_input(tmp_path, monkeypatch):
     monkeypatch.setattr(evaluation, "sha256_file", changed)
     with pytest.raises(ValueError, match="Solution changed"):
         evaluate_ensemble_csv(predictions, challenge, solution)
+
+
+def test_evaluate_ensemble_detects_changed_training_csv(tmp_path, monkeypatch):
+    import gridworld_rl.ensemble_evaluation as evaluation
+
+    predictions, challenge, solution = _files(tmp_path)
+    train = tmp_path / "train.csv"
+    train.write_text("state,action,reward,next_state,done\n0,0,0,1,0\n")
+    original = evaluation.sha256_file
+    calls = 0
+
+    def changed(path):
+        nonlocal calls
+        if path == train:
+            calls += 1
+            if calls == 2:
+                return "changed"
+        return original(path)
+
+    monkeypatch.setattr(evaluation, "sha256_file", changed)
+    with pytest.raises(ValueError, match="Train changed"):
+        evaluate_ensemble_csv(predictions, challenge, solution, train_csv=train)

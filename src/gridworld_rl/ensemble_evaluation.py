@@ -11,8 +11,12 @@ from typing import Any
 
 import numpy as np
 
-from .data import load_evaluation_data
-from .evaluation import classification_metrics
+from .data import (
+    evaluation_split_diagnostics,
+    load_evaluation_data,
+    load_transition_csv,
+)
+from .evaluation import classification_metrics, overlap_slice_masks
 from .reproducibility import sha256_file
 from .uncertainty import validate_bootstrap_options
 
@@ -131,6 +135,7 @@ def evaluate_ensemble_csv(
     bootstrap_seed: int = 0,
     confidence_level: float = 0.95,
     target_coverage: float | None = None,
+    train_csv: str | Path | None = None,
 ) -> dict[str, Any]:
     """Report coverage and accuracy on accepted rows, checking row alignment."""
 
@@ -147,6 +152,8 @@ def evaluate_ensemble_csv(
         "challenge": Path(challenge_csv),
         "solution": Path(solution_csv),
     }
+    if train_csv is not None:
+        paths["train"] = Path(train_csv)
     fingerprints = {name: sha256_file(path) for name, path in paths.items()}
     with paths["predictions"].open(encoding="utf-8", newline="") as file:
         header = next(csv.reader(file, strict=True), None)
@@ -331,6 +338,30 @@ def evaluate_ensemble_csv(
         if accepted_count
         else None,
     }
+    if "train" in paths:
+        train = load_transition_csv(paths["train"], num_actions=num_actions)
+        result["evaluation_split_diagnostics"] = evaluation_split_diagnostics(
+            train, solution, num_actions=num_actions
+        )
+        result["overlap_sliced_ensemble"] = {}
+        for name, mask in overlap_slice_masks(train, solution).items():
+            rows = int(mask.sum())
+            accepted_slice = mask & accepted_mask
+            accepted_rows = int(accepted_slice.sum())
+            result["overlap_sliced_ensemble"][name] = {
+                "rows": rows,
+                "accepted_rows": accepted_rows,
+                "abstained_rows": rows - accepted_rows,
+                "coverage": accepted_rows / rows if rows else None,
+                "selective_accuracy": (
+                    float((predicted[accepted_slice] == targets[accepted_slice]).mean())
+                    if accepted_rows
+                    else None
+                ),
+                "suggested_accuracy": (
+                    float((predicted[mask] == targets[mask]).mean()) if rows else None
+                ),
+            }
     if target_coverage is not None:
         chosen = next(
             point for point in agreement_curve if point["coverage"] >= target_coverage

@@ -208,6 +208,9 @@ def build_parser() -> argparse.ArgumentParser:
     ensemble_eval.add_argument("--predictions", required=True)
     ensemble_eval.add_argument("--challenge", required=True)
     ensemble_eval.add_argument("--solution", required=True)
+    ensemble_eval.add_argument(
+        "--train", help="training CSV for overlap and split diagnostics"
+    )
     ensemble_eval.add_argument("--bootstrap-replicates", type=int, default=0)
     ensemble_eval.add_argument("--bootstrap-seed", type=int, default=0)
     ensemble_eval.add_argument("--confidence-level", type=float, default=0.95)
@@ -618,6 +621,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 bootstrap_seed=args.bootstrap_seed,
                 confidence_level=args.confidence_level,
                 target_coverage=args.target_coverage,
+                train_csv=args.train,
             )
             print(json.dumps(result, sort_keys=True, allow_nan=False))
         elif args.command == "compare-checkpoints":

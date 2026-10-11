@@ -564,6 +564,12 @@ agreement enter together, so achieved coverage can exceed the target. When
 bootstrap is enabled, the recommendation also includes intervals at that
 threshold. Choose the threshold on held-out calibration rows before applying
 it to new data.
+Add `--train Gridworld-10_Dataset/train.csv` to break the ensemble result into
+exact training transitions, new transitions at seen states, and unseen states.
+Each slice reports row count, accepted and abstained counts, coverage, accuracy
+on accepted rows, and accuracy of the suggested winner. Empty slices use `null`
+for undefined rates. The output also includes the evaluation split diagnostics
+and a SHA-256 fingerprint for the validated training CSV.
 Prediction states must match challenge rows exactly, including duplicates and
 order. Vote counts, agreement, and abstention fields are checked before scoring;
 all three inputs are fingerprinted again before results are returned.
